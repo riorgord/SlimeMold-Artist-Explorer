@@ -1,0 +1,61 @@
+{
+  "11": {
+    "inputs": {
+      "text": [
+        "14",
+        0
+      ],
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      },
+      "clip": [
+        "15",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename": "condition_tensor",
+      "condition": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "SaveCondition",
+    "_meta": {
+      "title": "Save Condition"
+    }
+  },
+  "14": {
+    "inputs": {
+      "text": "",
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      }
+    },
+    "class_type": "JjkText",
+    "_meta": {
+      "title": "提示词文本行"
+    }
+  },
+  "15": {
+    "inputs": {
+      "ckpt_name": "Qwen-Rapid-AIO-NSFW-v18.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Checkpoint加载器（简易）"
+    }
+  }
+}

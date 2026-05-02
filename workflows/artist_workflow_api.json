@@ -1,0 +1,43 @@
+{
+  "4": {
+    "inputs": {
+      "ckpt_name": "waiIllustriousSDXL_v140.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Checkpoint加载器（简易）"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "1girl,loli,(by usashiro mani:0.6),(by lets0020:1.1),(by wanke:0.7),(bt Rella:0.3)",
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      },
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "19": {
+    "inputs": {
+      "filename": "condition_tensor",
+      "condition": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "SaveCondition",
+    "_meta": {
+      "title": "Save Condition"
+    }
+  }
+}

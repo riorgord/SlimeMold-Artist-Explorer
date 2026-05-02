@@ -1,0 +1,22 @@
+# Python 字节码
+__pycache__/
+*.pyc
+*.pyo
+
+# 向量库（用户自行构建）
+outputs_2048/
+outputs_anima/
+
+# 运行时数据（含用户设置）
+data/
+
+# 环境
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

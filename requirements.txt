@@ -1,0 +1,27 @@
+# ===========================================
+# 核心依赖（探索 WebUI 必须）
+# ===========================================
+gradio>=4.0
+numpy
+matplotlib
+scikit-learn
+scikit-optimize
+faiss-cpu
+requests
+pandas
+
+# ===========================================
+# 向量库构建（build_webui.py / build_webui_anima.py 步骤② 需要）
+# 根据你的硬件选择：
+# ===========================================
+
+# CPU 版（通用：A卡/I卡/Apple Silicon/无独立显卡）
+# pip install torch
+
+# CUDA 版（NVIDIA 显卡，根据 CUDA 版本选 cu 后缀）
+# RTX 30/40 系: pip install torch --index-url https://download.pytorch.org/whl/cu124
+# RTX 50 系:    pip install torch --index-url https://download.pytorch.org/whl/cu130
+
+# ⚠️ AMD / Intel 显卡：PyTorch 不原生支持，用 CPU 版；或自行配置 DirectML(Windows) / ROCm(Linux)
+
+# 构建步骤② 只运行一次，做完即可卸载 torch。探索 WebUI 不需要 torch。

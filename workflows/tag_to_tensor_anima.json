@@ -1,0 +1,63 @@
+{
+  "11": {
+    "inputs": {
+      "text": [
+        "14",
+        0
+      ],
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      },
+      "clip": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename": "condition_tensor",
+      "condition": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "SaveCondition",
+    "_meta": {
+      "title": "Save Condition"
+    }
+  },
+  "13": {
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "14": {
+    "inputs": {
+      "text": "",
+      "speak_and_recognation": {
+        "__value__": [
+          false,
+          true
+        ]
+      }
+    },
+    "class_type": "JjkText",
+    "_meta": {
+      "title": "提示词文本行"
+    }
+  }
+}
