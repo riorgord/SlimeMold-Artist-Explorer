@@ -62,7 +62,7 @@ nvidia-smi >nul 2>&1
 if !errorlevel!==0 (
     echo   NVIDIA GPU found - installing CUDA torch ...
     set "PIP_INDEX_URL="
-    pip install torch --index-url https://download.pytorch.org/whl/cu130
+    pip install torch --index-url https://mirrors.aliyun.com/pytorch-wheels/cu130
     if !errorlevel! neq 0 (
         echo   [WARN] CUDA torch failed, fallback CPU ...
         pip install torch

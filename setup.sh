@@ -61,10 +61,7 @@ pip install --upgrade pip
 # ── 检测 GPU 并安装 torch ──
 echo ""
 echo "[3/4] 检测 GPU ..."
-if grep -qi microsoft /proc/version 2>/dev/null; then
-    echo "  [INFO] WSL 环境，安装 CPU 版 torch"
-    pip install torch
-elif command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU 已检测到"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
     echo "  正在安装 CUDA 版 torch..."
@@ -95,10 +92,7 @@ pip install --upgrade pip
 
 echo ""
 echo "[3/4] 检测 GPU ..."
-if grep -qi microsoft /proc/version 2>/dev/null; then
-    echo "  [INFO] WSL 环境，安装 CPU 版 torch"
-    pip install torch
-elif command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
     PIP_INDEX_URL="" pip install torch --index-url https://download.pytorch.org/whl/cu130 || {
