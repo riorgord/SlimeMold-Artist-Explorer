@@ -52,7 +52,7 @@ if "%SKIP_INSTALL%"=="1" goto :menu
 :: Upgrade pip
 echo.
 echo [2/4] Upgrading pip ...
-python -m pip install --upgrade pip -q
+python -m pip install --upgrade pip
 
 :: GPU detection + torch (torch must use official index, not mirror)
 echo.
@@ -60,20 +60,20 @@ echo [3/4] Installing torch ...
 nvidia-smi >nul 2>&1
 if !errorlevel!==0 (
     echo   NVIDIA GPU found - installing CUDA torch ...
-    pip install torch --index-url https://download.pytorch.org/whl/cu130 -q
+    pip install torch --index-url https://download.pytorch.org/whl/cu130
     if !errorlevel! neq 0 (
         echo   [WARN] CUDA torch failed, fallback CPU ...
-        pip install torch -q
+        pip install torch
     )
 ) else (
     echo   No NVIDIA GPU - installing CPU torch ...
-    pip install torch -q
+    pip install torch
 )
 
 :: Dependencies
 echo.
 echo [4/4] Installing dependencies ...
-pip install -r requirements.txt -q
+pip install -r requirements.txt
 if !errorlevel! neq 0 (
     echo [ERROR] Failed to install dependencies. Check your network.
     pause

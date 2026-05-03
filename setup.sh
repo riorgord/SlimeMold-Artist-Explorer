@@ -56,7 +56,7 @@ fi
 # ── 升级 pip ──
 echo ""
 echo "[2/4] 升级 pip ..."
-pip install --upgrade pip -q
+pip install --upgrade pip
 
 # ── 检测 GPU 并安装 torch ──
 echo ""
@@ -65,19 +65,19 @@ if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU 已检测到"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
     echo "  正在安装 CUDA 版 torch..."
-    pip install torch --index-url https://download.pytorch.org/whl/cu130 -q || {
+    pip install torch --index-url https://download.pytorch.org/whl/cu130 || {
         echo "  [WARN] CUDA torch 安装失败，回退 CPU 版..."
-        pip install torch -q
+        pip install torch
     }
 else
     echo "  [INFO] 未检测到 NVIDIA GPU，安装 CPU 版 torch"
-    pip install torch -q
+    pip install torch
 fi
 
 # ── 安装其余依赖 ──
 echo ""
 echo "[4/4] 安装依赖 ..."
-pip install -r requirements.txt -q
+pip install -r requirements.txt
 
 # ── 给脚本加执行权限 ──
 chmod +x setup.sh 2>/dev/null || true
@@ -88,23 +88,23 @@ else
 # ── 升级 pip + 装依赖 ──
 echo ""
 echo "[2/4] 升级 pip ..."
-pip install --upgrade pip -q
+pip install --upgrade pip
 
 echo ""
 echo "[3/4] 检测 GPU ..."
 if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
-    PIP_INDEX_URL="" pip install torch --index-url https://download.pytorch.org/whl/cu130 -q || {
-        echo "  [WARN] 回退 CPU torch"; PIP_INDEX_URL="" pip install torch -q; }
+    PIP_INDEX_URL="" pip install torch --index-url https://download.pytorch.org/whl/cu130 || {
+        echo "  [WARN] 回退 CPU torch"; PIP_INDEX_URL="" pip install torch; }
 else
     echo "  [INFO] CPU torch"
-    PIP_INDEX_URL="" pip install torch -q
+    PIP_INDEX_URL="" pip install torch
 fi
 
 echo ""
 echo "[4/4] 安装依赖 ..."
-pip install -r requirements.txt -q
+pip install -r requirements.txt
 fi
 
 # ── 菜单 ──
