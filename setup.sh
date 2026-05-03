@@ -63,15 +63,18 @@ echo ""
 echo "[3/4] 检测 GPU ..."
 if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU 已检测到"
-    nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
+    nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:" || true
     echo "  正在安装 CUDA 版 torch..."
-    pip install torch --index-url https://download.pytorch.org/whl/cu130 || {
+    set +e
+    pip install torch --index-url https://download.pytorch.org/whl/cu130
+    if [ $? -ne 0 ]; then
         echo "  [WARN] CUDA torch 安装失败，回退 CPU 版..."
         pip install torch
-    }
+    fi
+    set -e
 else
     echo "  [INFO] 未检测到 NVIDIA GPU，安装 CPU 版 torch"
-    pip install torch
+    set +e; pip install torch; set -e
 fi
 
 # ── 安装其余依赖 ──
