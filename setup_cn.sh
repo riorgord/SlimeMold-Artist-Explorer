@@ -64,7 +64,7 @@ pip install --upgrade pip
 # ── 检测 GPU 并安装 torch ──
 echo ""
 echo "[3/4] 检测 GPU ..."
-command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU 已检测到"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
     echo "  正在安装 CUDA 版 torch..."
@@ -95,7 +95,7 @@ pip install --upgrade pip
 
 echo ""
 echo "[3/4] 检测 GPU ..."
-command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
     PIP_INDEX_URL="" pip install torch --index-url https://mirrors.aliyun.com/pytorch-wheels/cu130 || {
