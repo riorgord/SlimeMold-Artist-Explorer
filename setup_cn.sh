@@ -69,7 +69,7 @@ if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:" || true
     echo "  正在安装 CUDA 版 torch..."
     set +e
-    pip install torch --index-url https://mirrors.aliyun.com/pytorch-wheels/cu130
+    pip install --default-timeout=120 torch --index-url https://download.pytorch.org/whl/cu128
     if [ $? -ne 0 ]; then
         echo "  [WARN] CUDA torch 安装失败，回退 CPU 版..."
         pip install torch
@@ -101,7 +101,7 @@ echo "[3/4] 检测 GPU ..."
 if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "  [OK] NVIDIA GPU"
     nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1 | xargs echo "  GPU:"
-    PIP_INDEX_URL="" pip install torch --index-url https://mirrors.aliyun.com/pytorch-wheels/cu130 || {
+    PIP_INDEX_URL="" pip install --default-timeout=120 torch --index-url https://download.pytorch.org/whl/cu128 || {
         echo "  [WARN] 回退 CPU torch"; PIP_INDEX_URL="" pip install torch; }
 else
     echo "  [INFO] CPU torch"
