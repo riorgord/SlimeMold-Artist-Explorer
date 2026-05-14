@@ -56,6 +56,7 @@ EVAL_BUDGET = 30                                        # 每轮全局探索的�
 MAX_GENERATIONS = 50                                    # 最大迭代轮数（全局探索的总轮数上限）
 SIMILARITY_THRESHOLD = 0.85                             # 触角相似度阈值（超过此值视为"拥挤"，触发排斥力）
 MIXED_ARTISTS_COUNT = 4                                 # 生成的画师串默认包含的画师数量（可被保护区设置覆盖）
+TEMPERATURE = 1.0                                       # 画师权重温度（>1 主画师更突出，<1 更均匀）
 STEP_SIZE = 0.12                                        # 触角变异步长
 
 # ---- Ban区阈值 ----
@@ -151,12 +152,17 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
     distances, idxs = index.search(blended_vec.reshape(1, -1), top_k * 3)
     parts = []
     used_ids = set()
-    for rank, (idx, dist) in enumerate(zip(idxs[0], distances[0])):
+    # 归一化距离 + 温度
+    ds = distances[0]
+    d_min, d_max = ds.min(), ds.max()
+    d_range = d_max - d_min
+    for rank, (idx, dist) in enumerate(zip(idxs[0], ds)):
         artist_id = artist_ids_all[idx]
         if artist_id in used_ids:
             continue
-        weight = 0.9 - (rank * 0.12)
-        weight = max(0.4, min(0.9, weight))
+        # 归一化到 0~1，加温度
+        norm = (dist - d_min) / d_range if d_range > 0 else 1.0
+        weight = max(0.01, norm ** TEMPERATURE)
         name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(by {name}:{weight:.2f})")
         used_ids.add(artist_id)

@@ -78,7 +78,7 @@ from engines.interactive_style_explorer8 import (
     BASE_POSITIVE_PROMPT, BASE_NEGATIVE_PROMPT, RUN_OUTPUT_DIR,
     N_TENTACLES, EVAL_BUDGET, MAX_GENERATIONS, SIMILARITY_THRESHOLD, MIXED_ARTISTS_COUNT,
     BAN_SELECT_THRESH, BAN_MUTATE_THRESH, BAN_REBIRTH_THRESH,
-    BAN_PENALTY_COEFFICIENT, BAN_DECAY_RATE, STEP_SIZE,
+    BAN_PENALTY_COEFFICIENT, BAN_DECAY_RATE, STEP_SIZE, TEMPERATURE,
     PROTECT_POP_SIZE, PROTECT_MAX_CANDIDATES, PROTECT_CONVERGE_ROUNDS,
     WEAK_CONSECUTIVE_NEGATIVE, PROMOTE_SUGGEST_ROUNDS, PULL_STRENGTH, MAX_WEAK_TENTACLES,
     DEBUG_MODE, PLOT_STYLE, TRACE_HISTORY_LEN,
@@ -226,6 +226,7 @@ def apply_settings_to_v8(settings: dict):
         'similarity_thresh': 'SIMILARITY_THRESHOLD',
         'mixed_count': 'MIXED_ARTISTS_COUNT',
         'step_size': 'STEP_SIZE',
+        'temperature': 'TEMPERATURE',
         'ban_select_thresh': 'BAN_SELECT_THRESH',
         'ban_mutate_thresh': 'BAN_MUTATE_THRESH',
         'ban_rebirth_thresh': 'BAN_REBIRTH_THRESH',
@@ -1417,6 +1418,9 @@ def build_app():
                                               label="画师串长度", precision=0)
                     s_step_size = gr.Slider(0.01, 0.5, value=get_setting('step_size', STEP_SIZE),
                                             step=0.01, label="变异步长")
+                    s_temperature = gr.Slider(0.1, 5.0, value=get_setting('temperature', TEMPERATURE),
+                                              step=0.1, label="权重温度",
+                                              info=">1 主画师更突出，<1 更均匀")
 
             # 4. Ban区
             with gr.Accordion("🚫 Ban区参数", open=False):
@@ -2040,7 +2044,7 @@ def build_app():
                              ckpt, pos, neg, n_tent, budget, max_gen, sim_thresh, mixed,
                              ban_sel, ban_mut, ban_reb, ban_pen, ban_dec,
                              prot_pop, prot_max, prot_conv,
-                             weak_neg, prom_rounds, pull, max_wk, step_size,
+                             weak_neg, prom_rounds, pull, max_wk, step_size, temp,
                              debug, plot_style, trace):
             s = {
                 'comfyui_server': comfy_srv,
@@ -2080,7 +2084,7 @@ def build_app():
                     s_ban_select, s_ban_mutate, s_ban_rebirth, s_ban_penalty, s_ban_decay,
                     s_protect_pop, s_protect_max, s_protect_conv,
                     s_weak_neg, s_promote_rounds, s_pull, s_max_weak,
-                    s_step_size, s_debug, s_plot_style, s_trace],
+                    s_step_size, s_temperature, s_debug, s_plot_style, s_trace],
             outputs=[settings_log]
         )
 

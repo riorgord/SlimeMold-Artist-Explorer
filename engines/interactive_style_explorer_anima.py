@@ -78,6 +78,7 @@ EVAL_BUDGET = 30
 MAX_GENERATIONS = 50
 SIMILARITY_THRESHOLD = 0.85
 MIXED_ARTISTS_COUNT = 4
+TEMPERATURE = 1.0                                       # 画师权重温度（>1 主画师更突出，<1 更均匀）
 
 # ---- Ban区阈值 ----
 BAN_SELECT_THRESH = 0.85
@@ -185,12 +186,15 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
     distances, idxs = index.search(blended_vec.reshape(1, -1), top_k * 3)
     parts = []
     used_ids = set()
-    for rank, (idx, dist) in enumerate(zip(idxs[0], distances[0])):
+    ds = distances[0]
+    d_min, d_max = ds.min(), ds.max()
+    d_range = d_max - d_min
+    for rank, (idx, dist) in enumerate(zip(idxs[0], ds)):
         artist_id = artist_ids_all[idx]
         if artist_id in used_ids:
             continue
-        weight = 0.9 - (rank * 0.12)
-        weight = max(0.4, min(0.9, weight))
+        norm = (dist - d_min) / d_range if d_range > 0 else 1.0
+        weight = max(0.01, norm ** TEMPERATURE)
         name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(@{name}:{weight:.2f})")
         used_ids.add(artist_id)

@@ -733,7 +733,7 @@ def build_app():
         test_btn.click(fn=test_conn, inputs=[comfy_test_addr], outputs=[conn_result])
 
         # -- 保存设置 --
-        def on_save(mode, srv, wf, w, h, st, cf, samp, sch, unet, pos, neg, nt, ev, mg, sth, mc, ss,
+        def on_save(mode, srv, wf, w, h, st, cf, samp, sch, unet, pos, neg, nt, ev, mg, sth, mc, ss, temp,
                     bs, bm, br, bp, bd, pp, pm, pc, wn, pr, pl, mw, debug, plot, trace):
             s = {k:v for k,v in zip(
                 ['anima_mode','anima_comfy','anima_wf','anima_w','anima_h','anima_st','anima_cf','anima_samp','anima_sch','anima_unet','anima_pos','anima_neg',
@@ -750,7 +750,7 @@ def build_app():
             v8.SAMPLER_NAME = samp; v8.SCHEDULER = sch
             v8.BASE_POSITIVE_PROMPT = pos; v8.BASE_NEGATIVE_PROMPT = neg
             v8.N_TENTACLES = int(nt); v8.EVAL_BUDGET = int(ev); v8.MAX_GENERATIONS = int(mg)
-            v8.SIMILARITY_THRESHOLD = float(sth); v8.MIXED_ARTISTS_COUNT = int(mc); v8.TENTACLE_STEP_SIZE = float(ss)
+            v8.SIMILARITY_THRESHOLD = float(sth); v8.MIXED_ARTISTS_COUNT = int(mc); v8.TENTACLE_STEP_SIZE = float(ss); v8.TEMPERATURE = float(temp)
             v8.BAN_SELECT_THRESH = float(bs); v8.BAN_MUTATE_THRESH = float(bm); v8.BAN_REBIRTH_THRESH = float(br)
             v8.BAN_PENALTY_COEFFICIENT = float(bp); v8.BAN_DECAY_RATE = float(bd)
             v8.PROTECT_POP_SIZE = int(pp); v8.PROTECT_MAX_CANDIDATES = int(pm); v8.PROTECT_CONVERGE_ROUNDS = int(pc)
