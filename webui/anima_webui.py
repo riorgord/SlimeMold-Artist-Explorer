@@ -761,7 +761,7 @@ def build_app():
             else: v8.WORKFLOW_TEMPLATE_PATH = Path("workflows/t2i_anima_base.json")
             return "✅ Anima 设置已保存（部分参数需下次重启程序或初始化新会话）"
         save_btn.click(fn=on_save,
-            inputs=[s_mode,s_srv,s_wf,s_w,s_h,s_st,s_cf,s_samp,s_sch,s_unet,s_pos,s_neg,s_nt,s_ev,s_mg,s_sth,s_mc,s_ss,
+            inputs=[s_mode,s_srv,s_wf,s_w,s_h,s_st,s_cf,s_samp,s_sch,s_unet,s_pos,s_neg,s_nt,s_ev,s_mg,s_sth,s_mc,s_ss, s_tmp,
                     s_bs,s_bm,s_br,s_bp,s_bd,s_pp,s_pm,s_pc,s_wn,s_pr,s_pl,s_mw,s_debug,s_plot,s_trace],
             outputs=[save_log])
 
