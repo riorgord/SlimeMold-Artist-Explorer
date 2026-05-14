@@ -432,6 +432,7 @@ def build_app():
                 with gr.Row():
                     s_mc = gr.Number(value=get_setting('anima_mc', v8.MIXED_ARTISTS_COUNT), label="画师串长度", precision=0)
                     s_ss = gr.Slider(0.01,0.5,value=get_setting('anima_ss', v8.TENTACLE_STEP_SIZE),step=0.01,label="变异步长")
+                    s_tmp = gr.Slider(0.1,5.0,value=get_setting('anima_temp', getattr(v8,'TEMPERATURE',1.0)),step=0.1,label="权重温度",info=">1主画师突出，<1更均匀")
             with gr.Accordion("🚫 Ban区参数", open=False):
                 with gr.Row():
                     s_bs = gr.Slider(0.5,1.0,value=get_setting('anima_bs', v8.BAN_SELECT_THRESH),step=0.01,label="选择阈值")
