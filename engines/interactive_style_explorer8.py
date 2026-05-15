@@ -56,8 +56,7 @@ EVAL_BUDGET = 30                                        # 每轮全局探索的�
 MAX_GENERATIONS = 50                                    # 最大迭代轮数（全局探索的总轮数上限）
 SIMILARITY_THRESHOLD = 0.85                             # 触角相似度阈值（超过此值视为"拥挤"，触发排斥力）
 MIXED_ARTISTS_COUNT = 4                                 # 生成的画师串默认包含的画师数量（可被保护区设置覆盖）
-TEMPERATURE = 1.0                                       # 画师权重温度（>1 主画师更突出，<1 更均匀）
-SDXL_TEMP_FACTOR = 2.0                                  # SDXL 2048维补偿因子（使体感与 Anima 1024维一致）
+TEMPERATURE = 5.0                                       # 画师权重温度（SDXL 2048维需较高默认值, Anima 默认 1.0）
 STEP_SIZE = 0.12                                        # 触角变异步长
 
 # ---- Ban区阈值 ----
@@ -151,27 +150,22 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
         top_k = MIXED_ARTISTS_COUNT
     blended_vec = np.asarray(blended_vec, dtype=np.float32).flatten()
     distances, idxs = index.search(blended_vec.reshape(1, -1), top_k * 3)
-    # 收集 top-k 候选，仅在选中的画师内部归一化
-    ds = distances[0]
-    selected = []
-    seen = set()
-    for i, (idx, dist) in enumerate(zip(idxs[0], ds)):
-        aid = artist_ids_all[idx]
-        if aid in seen:
-            continue
-        selected.append((idx, aid, dist))
-        seen.add(aid)
-        if len(selected) >= top_k:
-            break
-    d_vals = [d for _, _, d in selected]
-    d_min, d_max = min(d_vals), max(d_vals)
-    d_range = d_max - d_min
     parts = []
-    for idx, aid, dist in selected:
+    used_ids = set()
+    ds = distances[0]
+    d_min, d_max = ds.min(), ds.max()
+    d_range = d_max - d_min
+    for rank, (idx, dist) in enumerate(zip(idxs[0], ds)):
+        artist_id = artist_ids_all[idx]
+        if artist_id in used_ids:
+            continue
         norm = (dist - d_min) / d_range if d_range > 0 else 1.0
-        weight = max(0.01, norm ** (TEMPERATURE * SDXL_TEMP_FACTOR))
-        name = id_to_name.get(aid, str(aid))
+        weight = max(0.01, norm ** TEMPERATURE)
+        name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(by {name}:{weight:.2f})")
+        used_ids.add(artist_id)
+        if len(parts) >= top_k:
+            break
     return ", ".join(parts)
 
 def encode_text_to_vector(text: str) -> np.ndarray:
