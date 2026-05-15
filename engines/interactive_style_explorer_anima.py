@@ -66,7 +66,7 @@ SCHEDULER = TURBO_SCHEDULER if MODE == "turbo" else BASE_SCHEDULER
 WORKFLOW_TEMPLATE_PATH = Path("workflows/t2i_anima_turbo.json") if MODE == "turbo" else Path("workflows/t2i_anima_base.json")
 
 # ---- Anima UNet 模型 ----
-UNET_NAME = "anima-preview3-base.safetensors"
+UNET_NAME = "anima-base-v1.0.safetensors"
 
 # ---- Anima 加速 LoRA（turbo 模式需要，从 Civitai 下载后放入 ComfyUI models/loras/） ----
 TURBO_LORA_NAME = "anima-turbo-lora-v0.1.safetensors"
