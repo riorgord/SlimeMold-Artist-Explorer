@@ -150,26 +150,32 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
         top_k = MIXED_ARTISTS_COUNT
     blended_vec = np.asarray(blended_vec, dtype=np.float32).flatten()
     distances, idxs = index.search(blended_vec.reshape(1, -1), top_k * 3)
-    parts = []
-    used_ids = set()
     ds = distances[0]
-    d_min, d_max = ds.min(), ds.max()
-    d_range = d_max - d_min
-    for rank, (idx, dist) in enumerate(zip(idxs[0], ds)):
-        artist_id = artist_ids_all[idx]
-        if artist_id in used_ids:
+    # 收集 top-k 去重候选
+    selected = []
+    seen = set()
+    for i, (idx, dist) in enumerate(zip(idxs[0], ds)):
+        aid = artist_ids_all[idx]
+        if aid in seen:
             continue
+        selected.append((idx, aid, dist))
+        seen.add(aid)
+        if len(selected) >= top_k:
+            break
+    # 仅在 top-k 内归一化
+    d_vals = [d for _, _, d in selected]
+    d_min, d_max = min(d_vals), max(d_vals)
+    d_range = d_max - d_min
+    parts = []
+    s = TEMPERATURE * 3.0
+    for idx, aid, dist in selected:
         norm = (dist - d_min) / d_range if d_range > 0 else 1.0
-        s = TEMPERATURE * 3.0
         if s > 0:
             weight = max(0.01, 1 - (1 - norm) ** s)
         else:
             weight = max(0.01, norm ** -s)
-        name = id_to_name.get(artist_id, str(artist_id))
+        name = id_to_name.get(aid, str(aid))
         parts.append(f"(by {name}:{weight:.2f})")
-        used_ids.add(artist_id)
-        if len(parts) >= top_k:
-            break
     return ", ".join(parts)
 
 def encode_text_to_vector(text: str) -> np.ndarray:
