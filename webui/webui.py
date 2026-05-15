@@ -2064,6 +2064,7 @@ def build_app():
                 'weak_negative': int(weak_neg), 'promote_rounds': int(prom_rounds),
                 'pull_strength': float(pull), 'max_weak': int(max_wk),
                 'step_size': float(step_size),
+                'temperature': float(temp),
                 'debug_mode': bool(debug), 'plot_style': plot_style,
                 'trace_len': int(trace),
             }
@@ -2073,7 +2074,7 @@ def build_app():
                 debug_val = s.get('debug_mode', False)
                 print(f"[DEBUG] 设置已保存（部分参数需下次重启程序或初始化新会话）: debug_mode={debug_val}, eval_budget={s.get('eval_budget')}, "
                       f"n_tentacles={s.get('n_tentacles')}, steps={s.get('steps')}")
-            return "✅ 设置已保存并生效（部分参数需下次重启程序或初始化新会话）"
+            return "✅ 设置已保存并生效（触角总数/每轮生图数/最大轮数需初始化新会话后生效，其余参数下轮探索即生效）"
 
         save_settings_btn.click(
             fn=on_save_settings,
