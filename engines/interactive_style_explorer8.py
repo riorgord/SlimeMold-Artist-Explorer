@@ -56,7 +56,8 @@ EVAL_BUDGET = 30                                        # 每轮全局探索的�
 MAX_GENERATIONS = 50                                    # 最大迭代轮数（全局探索的总轮数上限）
 SIMILARITY_THRESHOLD = 0.85                             # 触角相似度阈值（超过此值视为"拥挤"，触发排斥力）
 MIXED_ARTISTS_COUNT = 4                                 # 生成的画师串默认包含的画师数量（可被保护区设置覆盖）
-TEMPERATURE = 0.5                                       # 画师权重温度(<1拉开, >1集中)
+TEMPERATURE = 1.0                                       # 画师权重温度（<1 更均匀，>1 主画师更突出）
+TEMP_SCALE = 0.25                                       # SDXL 2048维内部补偿（使滑条默认值体感一致）
 STEP_SIZE = 0.12                                        # 触角变异步长
 
 # ---- Ban区阈值 ----
@@ -160,7 +161,7 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
         if artist_id in used_ids:
             continue
         norm = (dist - d_min) / d_range if d_range > 0 else 1.0
-        weight = max(0.01, norm ** TEMPERATURE)
+        weight = max(0.01, norm ** (TEMPERATURE * TEMP_SCALE))
         name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(by {name}:{weight:.2f})")
         used_ids.add(artist_id)
