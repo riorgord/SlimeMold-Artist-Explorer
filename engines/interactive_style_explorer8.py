@@ -167,7 +167,7 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
     d_min, d_max = min(d_vals), max(d_vals)
     d_range = d_max - d_min
     parts = []
-    s = TEMPERATURE * 3.0
+    s = TEMPERATURE * 0.1
     for idx, aid, dist in selected:
         norm = (dist - d_min) / d_range if d_range > 0 else 1.0
         if s > 0:
