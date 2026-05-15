@@ -57,6 +57,7 @@ MAX_GENERATIONS = 50                                    # 最大迭代轮数（�
 SIMILARITY_THRESHOLD = 0.85                             # 触角相似度阈值（超过此值视为"拥挤"，触发排斥力）
 MIXED_ARTISTS_COUNT = 4                                 # 生成的画师串默认包含的画师数量（可被保护区设置覆盖）
 TEMPERATURE = 1.0                                       # 画师权重温度（>1 主画师更突出，<1 更均匀）
+SDXL_TEMP_FACTOR = 5.0                                  # SDXL 2048维补偿因子（使体感与 Anima 1024维一致）
 STEP_SIZE = 0.12                                        # 触角变异步长
 
 # ---- Ban区阈值 ----
@@ -162,7 +163,7 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
             continue
         # 归一化到 0~1，加温度
         norm = (dist - d_min) / d_range if d_range > 0 else 1.0
-        weight = max(0.01, norm ** TEMPERATURE)
+        weight = max(0.01, norm ** (TEMPERATURE * SDXL_TEMP_FACTOR))
         name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(by {name}:{weight:.2f})")
         used_ids.add(artist_id)
