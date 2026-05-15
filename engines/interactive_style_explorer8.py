@@ -56,7 +56,7 @@ EVAL_BUDGET = 30                                        # 每轮全局探索的�
 MAX_GENERATIONS = 50                                    # 最大迭代轮数（全局探索的总轮数上限）
 SIMILARITY_THRESHOLD = 0.85                             # 触角相似度阈值（超过此值视为"拥挤"，触发排斥力）
 MIXED_ARTISTS_COUNT = 4                                 # 生成的画师串默认包含的画师数量（可被保护区设置覆盖）
-TEMPERATURE = 5.0                                       # 画师权重温度（SDXL 2048维需较高默认值, Anima 默认 1.0）
+TEMPERATURE = 0.5                                       # 画师权重温度(<1拉开, >1集中)
 STEP_SIZE = 0.12                                        # 触角变异步长
 
 # ---- Ban区阈值 ----
