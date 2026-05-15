@@ -738,11 +738,11 @@ def build_app():
                     bs, bm, br, bp, bd, pp, pm, pc, wn, pr, pl, mw, debug, plot, trace):
             s = {k:v for k,v in zip(
                 ['anima_mode','anima_comfy','anima_wf','anima_w','anima_h','anima_st','anima_cf','anima_samp','anima_sch','anima_unet','anima_pos','anima_neg',
-                 'anima_nt','anima_ev','anima_mg','anima_sth','anima_mc','anima_ss',
+                 'anima_nt','anima_ev','anima_mg','anima_sth','anima_mc','anima_ss','anima_temp',
                  'anima_bs','anima_bm','anima_br','anima_bp','anima_bd','anima_pp','anima_pm','anima_pc',
                  'anima_wn','anima_pr','anima_pl','anima_mw','anima_debug','anima_plot','anima_trace'],
                 [mode,srv,wf,int(w),int(h),int(st),float(cf),samp,sch,unet,pos,neg,
-                 int(nt),int(ev),int(mg),float(sth),int(mc),float(ss),
+                 int(nt),int(ev),int(mg),float(sth),int(mc),float(ss),float(temp),
                  float(bs),float(bm),float(br),float(bp),float(bd),int(pp),int(pm),int(pc),
                  int(wn),int(pr),float(pl),int(mw),bool(debug),plot,int(trace)])}
             save_settings(s)
@@ -850,6 +850,7 @@ def build_app():
                'anima_pos':'BASE_POSITIVE_PROMPT','anima_neg':'BASE_NEGATIVE_PROMPT',
                'anima_nt':'N_TENTACLES','anima_ev':'EVAL_BUDGET','anima_mg':'MAX_GENERATIONS',
                'anima_sth':'SIMILARITY_THRESHOLD','anima_mc':'MIXED_ARTISTS_COUNT','anima_ss':'TENTACLE_STEP_SIZE',
+               'anima_temp':'TEMPERATURE',
                'anima_bs':'BAN_SELECT_THRESH','anima_bm':'BAN_MUTATE_THRESH','anima_br':'BAN_REBIRTH_THRESH',
                'anima_bp':'BAN_PENALTY_COEFFICIENT','anima_bd':'BAN_DECAY_RATE',
                'anima_pp':'PROTECT_POP_SIZE','anima_pm':'PROTECT_MAX_CANDIDATES','anima_pc':'PROTECT_CONVERGE_ROUNDS',
