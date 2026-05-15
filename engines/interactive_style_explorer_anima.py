@@ -633,7 +633,7 @@ class SlimeMoldExplorerAnima:
             return []
         idxs, wgts = zip(*candidates)
         probs = np.array(wgts) / np.sum(wgts)
-        n_sample = min(self.eval_budget, len(candidates))
+        n_sample = min(EVAL_BUDGET, len(candidates))
         selected = np.random.choice(len(candidates), size=n_sample, p=probs, replace=False)
         return [candidates[s][0] for s in selected]
 
