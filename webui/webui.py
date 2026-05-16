@@ -2218,6 +2218,11 @@ def build_app():
 # 入口
 # ===============================================
 if __name__ == "__main__":
+    if "--debug" in sys.argv:
+        import engines.interactive_style_explorer8 as v8s
+        v8s.DEBUG_MODE = True
+        globals()['DEBUG_MODE'] = True
+        print("[DEBUG] 调试模式已开启")
     print("🧫 启动画师串小助手 WebUI...")
     if DEBUG_MODE:
         print(f"[DEBUG] 配置: server={COMFYUI_SERVER}, n_tentacles={N_TENTACLES}, eval_budget={EVAL_BUDGET}")

@@ -78,7 +78,7 @@ PULL_STRENGTH = 0.2                # 绳子拉力系数（0~1，越大越拉向�
 MAX_WEAK_TENTACLES = 4             # 弱触角上限（探测点未满时可用）
 
 # ---- Debug调试与可视化 ----
-DEBUG_MODE = True                  # 是否开启调试模式（生成触角分布图等）
+DEBUG_MODE = False                 # 调试模式（启动时 --debug 开启）
 PLOT_STYLE = "lite"                # 绘图风格："full"=全库背景（较慢），"lite"=仅触角（快速）
 TRACE_HISTORY_LEN = 5              # 触角路径连线显示最近几步
 
@@ -153,12 +153,11 @@ def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
     ds = distances[0]
     parts = []
     used_ids = set()
-    s = TEMPERATURE * 500.0
     for rank, (idx, dist) in enumerate(zip(idxs[0], ds)):
         artist_id = artist_ids_all[idx]
         if artist_id in used_ids:
             continue
-        weight = max(0.01, dist ** s)
+        weight = max(0.01, 1.0 - (rank / top_k) * TEMPERATURE)
         name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(by {name}:{weight:.2f})")
         used_ids.add(artist_id)

@@ -102,7 +102,7 @@ MAX_WEAK_TENTACLES = 4
 TENTACLE_STEP_SIZE = 0.085
 
 # ---- Debug调试与可视化 ----
-DEBUG_MODE = True
+DEBUG_MODE = False                 # 调试模式（启动时 --debug 开启）
 PLOT_STYLE = "lite"
 TRACE_HISTORY_LEN = 5
 

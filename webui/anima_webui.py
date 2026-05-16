@@ -881,6 +881,9 @@ def build_app():
     return app
 
 if __name__ == "__main__":
+    if "--debug" in sys.argv:
+        v8.DEBUG_MODE = True
+        print("[DEBUG] Anima 调试模式已开启")
     print("🧫 Anima 启动...")
     app = build_app()
     app.launch(server_name="127.0.0.1", server_port=17326, share=False, css=CSS, theme=gr.themes.Soft())
