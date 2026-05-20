@@ -1098,6 +1098,22 @@ def build_app():
                 outputs=[page_size_state, page_state]
             )
 
+            # ---- Tag辅助（热切换：每次点探索自动同步）----
+            with gr.Row():
+                tag_ckpt = gr.Textbox(label="📦 Checkpoint路径 (.safetensors)",
+                                      placeholder="填写模型文件完整路径，留空则关闭Tag辅助",
+                                      scale=3)
+            with gr.Row():
+                tag_pos = gr.Textbox(label="🎯 正面 Tag (Danbooru格式)",
+                                     placeholder="如: sketch, monochrome, lineart",
+                                     scale=3)
+                tag_neg = gr.Textbox(label="🚫 排除 Tag (Danbooru格式)",
+                                     placeholder="如: 3d, realistic, cgi",
+                                     scale=3)
+                tag_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_spread', 0.3), step=0.05,
+                                       label="扩散度", scale=1)
+            gr.Markdown("*Checkpoint 必填 + 正面/排除至少填一个，否则走随机模式。中途修改 Tag 热切换，无需重新初始化。*")
+
             # ---- 单元格可见性 CSS（预创建网格用）----
             grid_css = gr.HTML("<style>" + " ".join([f".gc-{i}{{display:none!important}}" for i in range(16)]) + "</style>")
 
@@ -1520,41 +1536,96 @@ def build_app():
         # 事件绑定
         # ============================================
 
+        # -- Tag同步 --
+        def _sync_tag(ckpt, pos, neg, spread):
+            """将 Tag 输入框的值同步到引擎，返回 (是否启用Tag, 方向向量或None)。
+            只有 Tag 文本变化时才重新编码（force），否则复用缓存。"""
+            import engines.interactive_style_explorer8 as v8s
+            c = ckpt.strip() if ckpt else ""
+            p = pos.strip() if pos else ""
+            n = neg.strip() if neg else ""
+            changed = (c != v8s.ENCODE_CLIP_PATH or p != v8s.TAG_POS
+                       or n != v8s.TAG_NEG)
+            v8s.ENCODE_CLIP_PATH = c
+            v8s.TAG_POS = p
+            v8s.TAG_NEG = n
+            v8s.TAG_SPREAD = spread
+            if not c or (not p and not n):
+                return False, None
+            try:
+                return True, v8s.compute_tag_direction(force=changed)
+            except Exception as e:
+                if DEBUG_MODE:
+                    print(f"[DEBUG] _sync_tag 编码失败: {e}")
+                return False, None
+
         # -- 初始化 --
-        def on_init(spread):
+        def on_init(spread, ckpt, pos, neg, tag_spread):
             buffer_clear()
             buffer_flush_to_file()
-            save_settings({**load_settings(), 'spread': spread})
+            save_settings({**load_settings(), 'spread': spread, 'tag_spread': tag_spread})
             if DEBUG_MODE:
-                print(f"[DEBUG] on_init: spread={spread:.2f}")
-            exp = create_explorer(spread)
-            save_explorer_state(exp)  # 覆盖保存为新会话
-            pz = load_protect_zones()
-            if DEBUG_MODE:
-                act, art, clus = exp.stats()
-                print(f"[DEBUG] on_init: 活跃={act}/{exp.n_tentacles}, 画师={art}, 簇={clus}, 保护区={len(pz)}")
-            gr.Info("🆕 新会话已初始化")
-            return exp, f"### {get_stats_text(exp, pz)}", [], 0, get_ban_markdown(), get_protect_zone_markdown(), get_scout_markdown(exp)
+                print(f"[DEBUG] on_init: spread={spread:.2f}, ckpt={'...' if ckpt else '空'}, pos={'...' if pos else '空'}, neg={'...' if neg else '空'}")
+            tag_on, tag_dir = _sync_tag(ckpt, pos, neg, tag_spread)
+            if tag_on and tag_dir is not None:
+                exp = SlimeMoldExplorerV6(n_tentacles=N_TENTACLES, eval_budget=EVAL_BUDGET, spread=0)
+                exp.init_from_vector(tag_dir, tag_spread)
+                save_explorer_state(exp)
+                pz = load_protect_zones()
+                stats = (f"🟢 活跃 {N_TENTACLES}/{N_TENTACLES}　🎯 Tag方向出发　"
+                         f"🧬 第 0 代　|　扩散度 {tag_spread:.2f}")
+                gr.Info("🆕 Tag辅助初始化完成")
+                return exp, f"### {stats}", [], 0, get_ban_markdown(), get_protect_zone_markdown(), get_scout_markdown(exp)
+            elif not ckpt and not pos and not neg:
+                exp = create_explorer(spread)
+                save_explorer_state(exp)
+                pz = load_protect_zones()
+                if DEBUG_MODE:
+                    act, art, clus = exp.stats()
+                    print(f"[DEBUG] on_init: 活跃={act}/{exp.n_tentacles}, 画师={art}, 簇={clus}, 保护区={len(pz)}")
+                gr.Info("🆕 新会话已初始化 (随机)")
+                return exp, f"### {get_stats_text(exp, pz)}", [], 0, get_ban_markdown(), get_protect_zone_markdown(), get_scout_markdown(exp)
+            else:
+                # Tag 条件不满足 (比如没填 checkpoint)，提示后走随机
+                if not ckpt:
+                    gr.Warning("未填写 Checkpoint 路径，走随机初始化")
+                else:
+                    gr.Warning("正面/排除 Tag 至少填一个")
+                exp = create_explorer(spread)
+                save_explorer_state(exp)
+                pz = load_protect_zones()
+                return exp, f"### {get_stats_text(exp, pz)}", [], 0, get_ban_markdown(), get_protect_zone_markdown(), get_scout_markdown(exp)
 
         init_btn.click(
             fn=on_init,
-            inputs=[spread_slider],
+            inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread],
             outputs=[explorer_state, stats_display, batch_state, page_state, ban_markdown, pz_markdown, scout_markdown]
         )
 
         # -- 主操作：提交评分(如有) + 探索下一轮 --
-        def on_main_action(exp):
+        def on_main_action(exp, ckpt, pos, neg, tag_spread):
             import traceback
             try:
                 if exp is None:
                     gr.Warning("请先初始化探索器")
                     yield [], "### ❌ 请先初始化", None, exp, 0, ""
                     return
-                gr.Info("开始探索...")
                 server = get_setting('comfyui_server', COMFYUI_SERVER)
 
                 if DEBUG_MODE:
                     print(f"[DEBUG] === on_main_action: 第 {exp.generation+1} 代 ===")
+
+                # 0. 同步 Tag（热切换），先yield进度避免编码时UI冻结
+                c = ckpt.strip() if ckpt else ""
+                p = pos.strip() if pos else ""
+                n = neg.strip() if neg else ""
+                if c and (p or n):
+                    yield [], "### 🧬 编码Tag方向...", None, exp, 0, "🧬 编码Tag方向..."
+                tag_on, _ = _sync_tag(ckpt, pos, neg, tag_spread)
+                if tag_on:
+                    gr.Info(f"🎯 Tag引导模式 · 扩散度 {tag_spread}")
+                else:
+                    gr.Info("🎲 随机探索模式")
 
                 # 1. 提交评分
                 scores_dict = buffer_get_scores()
@@ -1580,7 +1651,7 @@ def build_app():
 
         main_btn.click(
             fn=on_main_action,
-            inputs=[explorer_state],
+            inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread],
             outputs=[batch_state, stats_display, pca_plot, explorer_state, page_state, progress_status]
         )
 

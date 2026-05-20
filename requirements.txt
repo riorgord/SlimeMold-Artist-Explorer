@@ -24,4 +24,11 @@ pandas
 
 # ⚠️ AMD / Intel 显卡：PyTorch 不原生支持，用 CPU 版；或自行配置 DirectML(Windows) / ROCm(Linux)
 
+# ===========================================
+# 本地 CLIP 编码（Tag辅助功能需要）
+# 不装也可用探索器，但Tag辅助功能会回退到 ComfyUI API
+# ===========================================
+safetensors
+transformers
+
 # 构建步骤② 只运行一次，做完即可卸载 torch。探索 WebUI 不需要 torch。

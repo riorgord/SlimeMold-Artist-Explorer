@@ -1,6 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 set "PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"
+set "HF_ENDPOINT=https://hf-mirror.com"
 
 echo ============================================
 echo   SlimeMold Artist Explorer - Setup

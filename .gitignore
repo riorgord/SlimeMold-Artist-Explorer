@@ -20,3 +20,6 @@ venv/
 .idea/
 *.swp
 *.swo
+
+# 开发调试
+dev.bat

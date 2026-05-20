@@ -3,6 +3,7 @@ set -euo pipefail
 
 # 中国大陆用户可取消下行注释，使用清华镜像加速
 export PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+export HF_ENDPOINT="https://hf-mirror.com"
 
 echo "============================================"
 echo "  画師串小助手 - 一键环境安装 (Linux/Mac)"

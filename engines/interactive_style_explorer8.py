@@ -88,12 +88,56 @@ BAN_LIST_FILE = Path("./data/ban_list.json")          # Ban区黑名单文件
 PROTECT_ZONES_DIR = Path("./data/protect_zones")      # 保护区数据文件夹
 SCOUT_POINTS_FILE = Path("./data/scout_points.json")  # 探测点数据文件
 
+# ---- Tag辅助 (从外部通过 WebUI 设置) ----
+ENCODE_CLIP_PATH = ""  # checkpoint 完整路径
+TAG_POS = ""           # 正面 Tag 文本
+TAG_NEG = ""           # 排除 Tag 文本
+TAG_SPREAD = 0.3       # 扩散度 (0=集中, 1=扩散)
+
+_CACHED_TAG_DIR = None
+_LAST_TAG_POS = ""
+_LAST_TAG_NEG = ""
+_LAST_CLIP_PATH = ""
+
+def compute_tag_direction(force=False):
+    """返回 Tag 方向向量 (2048-dim, L2归一化) 或 None。
+    force=True: 强制重新编码。否则 Tag 没变时复用缓存。"""
+    global _CACHED_TAG_DIR, _LAST_TAG_POS, _LAST_TAG_NEG, _LAST_CLIP_PATH
+    if not ENCODE_CLIP_PATH:
+        return None
+    pos = TAG_POS.strip() if TAG_POS else ""
+    neg = TAG_NEG.strip() if TAG_NEG else ""
+    if not pos and not neg:
+        return None
+    if not force and _CACHED_TAG_DIR is not None:
+        if (pos == _LAST_TAG_POS and neg == _LAST_TAG_NEG
+                and ENCODE_CLIP_PATH == _LAST_CLIP_PATH):
+            return _CACHED_TAG_DIR
+    try:
+        from engines.clip_encoder_sdxl import encode_text_local
+        if pos and neg:
+            pv = encode_text_local(pos, ENCODE_CLIP_PATH)
+            nv = encode_text_local(neg, ENCODE_CLIP_PATH)
+            combined = pv - nv
+        elif pos:
+            combined = encode_text_local(pos, ENCODE_CLIP_PATH)
+        else:
+            combined = -encode_text_local(neg, ENCODE_CLIP_PATH)
+        norm = np.linalg.norm(combined)
+        if norm > 0:
+            combined /= norm
+        combined = combined.astype(np.float32)
+        _CACHED_TAG_DIR = combined
+        _LAST_TAG_POS = pos
+        _LAST_TAG_NEG = neg
+        _LAST_CLIP_PATH = ENCODE_CLIP_PATH
+        return combined
+    except Exception as e:
+        print(f"[WARN] Tag方向计算失败: {e}")
+        return None
+
 # ---- 图片展示方式 ----
 SHOW_IMAGES_IN_BROWSER = True
-
-# ===============================================
-# 加载全库数据
-# ===============================================
 print("📂 加载画师向量库...")
 vectors_all = np.load(VECTORS_NPY).astype(np.float32)
 with open(IDS_JSON, 'r') as f:
@@ -595,6 +639,25 @@ class SlimeMoldExplorerV6:
             self.tentacles.append(t)
         print(f"🌱 初始扩散度 {spread:.2f}，触角分布在 {n_clusters_to_use}/{len(clusters_available)} 个风格簇中")
 
+    def init_from_vector(self, seed_vector: np.ndarray, spread: float):
+        """从编码向量初始化触角。spread=0 集中在最匹配画师，1=扩散。"""
+        seed_vector = np.asarray(seed_vector, dtype=np.float32).flatten()
+        k_search = min(N_TOTAL_ARTISTS, max(self.n_tentacles * 5, 120))
+        _, idxs = index.search(seed_vector.reshape(1, -1), k_search)
+        pool_size = max(self.n_tentacles, int(k_search * (0.03 + spread * 0.97)))
+        candidate_pool = idxs[0][:pool_size]
+        self.tentacles = []
+        for i in range(self.n_tentacles):
+            sidx = random.choice(candidate_pool)
+            t = Tentacle([sidx], np.array([1.0]), birth_gen=0)
+            t.update_trace(0)
+            self.tentacles.append(t)
+        self.recent_evaluated_vectors = []
+        self.generation = 0
+        self.global_best = None
+        n_unique = len(set(t.indices[0] for t in self.tentacles))
+        print(f"🌱 Tag初始化: {self.n_tentacles}个触角 → {n_unique}个不同画师 (扩散度{spread:.2f})")
+
     def _novelty_bonus(self, vector: np.ndarray) -> float:
         if not self.recent_evaluated_vectors:
             return 1.0
@@ -633,6 +696,7 @@ class SlimeMoldExplorerV6:
         self._assign_weak_tentacles()
         active_before = sum(1 for t in self.tentacles if t.active)
         weak_before = sum(1 for t in self.tentacles if t.is_weak)
+        tag_dir = compute_tag_direction()  # 只算一次
         candidates = []
         for i, t in enumerate(self.tentacles):
             if not t.active:
@@ -652,6 +716,10 @@ class SlimeMoldExplorerV6:
                 weight *= pen
             if t.is_weak:
                 weight *= 1.5
+            # Tag引导偏置：靠近Tag方向的触角更容易被选中
+            if tag_dir is not None:
+                sim = np.dot(t.vector, tag_dir)
+                weight *= 1.0 + sim * (1.0 - TAG_SPREAD) * 0.5
             candidates.append((i, weight))
         if not candidates:
             if DEBUG_MODE:
