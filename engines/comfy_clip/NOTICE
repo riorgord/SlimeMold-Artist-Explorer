@@ -1,0 +1,13 @@
+This directory adapts code from ComfyUI (https://github.com/comfyanonymous/ComfyUI)
+Licensed under GPL-3.0. Copyright (c) ComfyUI contributors.
+
+Files adapted:
+  clip_model.py      ← comfy/clip_model.py
+  sd1_clip.py        ← comfy/sd1_clip.py
+  sdxl_clip.py       ← comfy/sdxl_clip.py
+  llama.py           ← comfy/text_encoders/llama.py
+  anima.py           ← comfy/text_encoders/anima.py
+  ops.py             ← comfy/ops.py (minimal subset)
+
+Modified to run standalone without the ComfyUI runtime.
+The combined project is distributed under AGPL-3.0.

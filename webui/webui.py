@@ -1102,16 +1102,20 @@ def build_app():
             with gr.Row():
                 tag_ckpt = gr.Textbox(label="📦 Checkpoint路径 (.safetensors)",
                                       placeholder="填写模型文件完整路径，留空则关闭Tag辅助",
-                                      scale=3)
+                                      value=get_setting('tag_ckpt', ''), scale=3)
             with gr.Row():
                 tag_pos = gr.Textbox(label="🎯 正面 Tag (Danbooru格式)",
                                      placeholder="如: sketch, monochrome, lineart",
-                                     scale=3)
+                                     value=get_setting('tag_pos', ''), scale=3)
                 tag_neg = gr.Textbox(label="🚫 排除 Tag (Danbooru格式)",
                                      placeholder="如: 3d, realistic, cgi",
+                                     value=get_setting('tag_neg', ''),
                                      scale=3)
-                tag_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_spread', 0.3), step=0.05,
-                                       label="扩散度", scale=1)
+            with gr.Row():
+                tag_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_spread', 0.6), step=0.05,
+                                       label="引导强度 (1=最强)", scale=2)
+                tag_pool_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_pool_spread', 0.5), step=0.05,
+                                            label="扩散度 (0=集中)", scale=2)
             gr.Markdown("*Checkpoint 必填 + 正面/排除至少填一个，否则走随机模式。中途修改 Tag 热切换，无需重新初始化。*")
 
             # ---- 单元格可见性 CSS（预创建网格用）----
@@ -1537,43 +1541,46 @@ def build_app():
         # ============================================
 
         # -- Tag同步 --
-        def _sync_tag(ckpt, pos, neg, spread):
-            """将 Tag 输入框的值同步到引擎，返回 (是否启用Tag, 方向向量或None)。
-            只有 Tag 文本变化时才重新编码（force），否则复用缓存。"""
+        def _sync_tag(ckpt, pos, neg, guidance, pool_spread):
+            """同步 Tag 输入框到引擎。返回 (tag_on, tag_dir, pool_changed)。"""
             import engines.interactive_style_explorer8 as v8s
             c = ckpt.strip() if ckpt else ""
             p = pos.strip() if pos else ""
             n = neg.strip() if neg else ""
             changed = (c != v8s.ENCODE_CLIP_PATH or p != v8s.TAG_POS
                        or n != v8s.TAG_NEG)
+            pool_changed = (pool_spread != v8s.TAG_POOL_SPREAD)
             v8s.ENCODE_CLIP_PATH = c
             v8s.TAG_POS = p
             v8s.TAG_NEG = n
-            v8s.TAG_SPREAD = spread
+            v8s.TAG_GUIDANCE = guidance
+            v8s.TAG_POOL_SPREAD = pool_spread
+            save_settings({**load_settings(), 'tag_ckpt': c, 'tag_pos': p, 'tag_neg': n,
+                           'tag_spread': guidance, 'tag_pool_spread': pool_spread})
             if not c or (not p and not n):
-                return False, None
+                return False, None, False
             try:
-                return True, v8s.compute_tag_direction(force=changed)
+                return True, v8s.compute_tag_direction(force=changed), pool_changed and not changed
             except Exception as e:
                 if DEBUG_MODE:
                     print(f"[DEBUG] _sync_tag 编码失败: {e}")
-                return False, None
+                return False, None, False
 
         # -- 初始化 --
-        def on_init(spread, ckpt, pos, neg, tag_spread):
+        def on_init(spread, ckpt, pos, neg, guidance, pool_spread):
             buffer_clear()
             buffer_flush_to_file()
-            save_settings({**load_settings(), 'spread': spread, 'tag_spread': tag_spread})
+            save_settings({**load_settings(), 'spread': spread, 'tag_spread': guidance, 'tag_pool_spread': pool_spread})
             if DEBUG_MODE:
                 print(f"[DEBUG] on_init: spread={spread:.2f}, ckpt={'...' if ckpt else '空'}, pos={'...' if pos else '空'}, neg={'...' if neg else '空'}")
-            tag_on, tag_dir = _sync_tag(ckpt, pos, neg, tag_spread)
+            tag_on, tag_dir, _ = _sync_tag(ckpt, pos, neg, guidance, pool_spread)
             if tag_on and tag_dir is not None:
                 exp = SlimeMoldExplorerV6(n_tentacles=N_TENTACLES, eval_budget=EVAL_BUDGET, spread=0)
-                exp.init_from_vector(tag_dir, tag_spread)
+                exp.init_from_vector(tag_dir, pool_spread)
                 save_explorer_state(exp)
                 pz = load_protect_zones()
                 stats = (f"🟢 活跃 {N_TENTACLES}/{N_TENTACLES}　🎯 Tag方向出发　"
-                         f"🧬 第 0 代　|　扩散度 {tag_spread:.2f}")
+                         f"🧬 第 0 代　|　扩散度 {guidance:.2f}")
                 gr.Info("🆕 Tag辅助初始化完成")
                 return exp, f"### {stats}", [], 0, get_ban_markdown(), get_protect_zone_markdown(), get_scout_markdown(exp)
             elif not ckpt and not pos and not neg:
@@ -1598,12 +1605,12 @@ def build_app():
 
         init_btn.click(
             fn=on_init,
-            inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread],
+            inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
             outputs=[explorer_state, stats_display, batch_state, page_state, ban_markdown, pz_markdown, scout_markdown]
         )
 
         # -- 主操作：提交评分(如有) + 探索下一轮 --
-        def on_main_action(exp, ckpt, pos, neg, tag_spread):
+        def on_main_action(exp, ckpt, pos, neg, guidance, pool_spread):
             import traceback
             try:
                 if exp is None:
@@ -1621,9 +1628,11 @@ def build_app():
                 n = neg.strip() if neg else ""
                 if c and (p or n):
                     yield [], "### 🧬 编码Tag方向...", None, exp, 0, "🧬 编码Tag方向..."
-                tag_on, _ = _sync_tag(ckpt, pos, neg, tag_spread)
+                tag_on, tag_dir, pool_changed = _sync_tag(ckpt, pos, neg, guidance, pool_spread)
+                if tag_on and tag_dir is not None and pool_changed:
+                    exp.redistribute_from_vector(tag_dir, pool_spread)
                 if tag_on:
-                    gr.Info(f"🎯 Tag引导模式 · 扩散度 {tag_spread}")
+                    gr.Info(f"🎯 Tag引导模式")
                 else:
                     gr.Info("🎲 随机探索模式")
 
@@ -1651,7 +1660,7 @@ def build_app():
 
         main_btn.click(
             fn=on_main_action,
-            inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread],
+            inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
             outputs=[batch_state, stats_display, pca_plot, explorer_state, page_state, progress_status]
         )
 

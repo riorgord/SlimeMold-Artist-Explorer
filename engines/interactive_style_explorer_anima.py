@@ -112,6 +112,68 @@ BAN_LIST_FILE = Path("./data/ban_list_anima.json")
 PROTECT_ZONES_DIR = Path("./data/protect_zones_anima")
 SCOUT_POINTS_FILE = Path("./data/scout_points_anima.json")
 
+# ---- Tag辅助 (从外部通过 WebUI 设置) ----
+ENCODE_CLIP_PATH = ""
+TAG_POS = ""
+TAG_NEG = ""
+TAG_GUIDANCE = 0.6  # 引导强度 (0=无引导, 1=最强)
+TAG_POOL_SPREAD = 0.5
+_LIB_PREFIX = None
+
+def get_lib_prefix():
+    """从库目录的 library.json 读取建库前缀。缓存，只读一次。"""
+    global _LIB_PREFIX
+    if _LIB_PREFIX is None:
+        lib_json = VECTOR_DIR / "library.json"
+        if lib_json.exists():
+            _LIB_PREFIX = json.loads(lib_json.read_text(encoding='utf-8')).get("prefix", "")
+        else:
+            _LIB_PREFIX = ""
+    return _LIB_PREFIX
+
+def compute_tag_direction(force=False):
+    """返回 Tag 方向向量 (1024-dim, L2归一化) 或 None。
+    force=True: 强制重新编码。否则 Tag 没变时复用缓存。"""
+    global _CACHED_TAG_DIR, _LAST_TAG_POS, _LAST_TAG_NEG, _LAST_CLIP_PATH
+    if not ENCODE_CLIP_PATH:
+        return None
+    pos = TAG_POS.strip() if TAG_POS else ""
+    neg = TAG_NEG.strip() if TAG_NEG else ""
+    if not pos and not neg:
+        return None
+    if not force and _CACHED_TAG_DIR is not None:
+        if (pos == _LAST_TAG_POS and neg == _LAST_TAG_NEG
+                and ENCODE_CLIP_PATH == _LAST_CLIP_PATH):
+            return _CACHED_TAG_DIR
+    try:
+        from engines.clip_encoder_anima import encode_text_local
+        prefix = get_lib_prefix()
+        if pos and neg:
+            pv = encode_text_local(f"{prefix}{pos}", ENCODE_CLIP_PATH)
+            nv = encode_text_local(f"{prefix}{neg}", ENCODE_CLIP_PATH)
+            combined = pv - nv
+        elif pos:
+            combined = encode_text_local(f"{prefix}{pos}", ENCODE_CLIP_PATH)
+        else:
+            combined = -encode_text_local(f"{prefix}{neg}", ENCODE_CLIP_PATH)
+        norm = np.linalg.norm(combined)
+        if norm > 0:
+            combined /= norm
+        combined = combined.astype(np.float32)
+        _CACHED_TAG_DIR = combined
+        _LAST_TAG_POS = pos
+        _LAST_TAG_NEG = neg
+        _LAST_CLIP_PATH = ENCODE_CLIP_PATH
+        return combined
+    except Exception as e:
+        print(f"[WARN] Tag方向计算失败: {e}")
+        return None
+
+_CACHED_TAG_DIR = None
+_LAST_TAG_POS = ""
+_LAST_TAG_NEG = ""
+_LAST_CLIP_PATH = ""
+
 # ---- 图片展示方式 ----
 SHOW_IMAGES_IN_BROWSER = True
 
@@ -577,6 +639,44 @@ class SlimeMoldExplorerAnima:
             self.tentacles.append(t)
         print(f"🌱 初始扩散度 {spread:.2f}，触角分布在 {n_clusters_to_use}/{len(clusters_available)} 个风格簇中")
 
+    def init_from_vector(self, seed_vector: np.ndarray, spread: float):
+        """从编码向量初始化触角。spread=0 集中在最匹配画师，1=扩散。"""
+        seed_vector = np.asarray(seed_vector, dtype=np.float32).flatten()
+        k_search = min(N_TOTAL_ARTISTS, max(self.n_tentacles * 5, 120))
+        _, idxs = index.search(seed_vector.reshape(1, -1), k_search)
+        pool_size = max(self.n_tentacles, int(k_search * (0.03 + spread * 0.97)))
+        candidate_pool = idxs[0][:pool_size]
+        self.tentacles = []
+        for i in range(self.n_tentacles):
+            sidx = random.choice(candidate_pool)
+            t = Tentacle([sidx], np.array([1.0]), birth_gen=0)
+            t.update_trace(0)
+            self.tentacles.append(t)
+        self.recent_evaluated_vectors = []
+        self.generation = 0
+        self.global_best = None
+        n_unique = len(set(t.indices[0] for t in self.tentacles))
+        print(f"🌱 Tag初始化: {self.n_tentacles}个触角 → {n_unique}个不同画师 (扩散度{spread:.2f})")
+
+    def redistribute_from_vector(self, seed_vector: np.ndarray, spread: float):
+        """热切换扩散度：重新分配不在新候选池内的触角，保留评分历史。"""
+        seed_vector = np.asarray(seed_vector, dtype=np.float32).flatten()
+        k_search = min(N_TOTAL_ARTISTS, max(self.n_tentacles * 5, 120))
+        _, idxs = index.search(seed_vector.reshape(1, -1), k_search)
+        pool_size = max(self.n_tentacles, int(k_search * (0.03 + spread * 0.97)))
+        candidate_pool = idxs[0][:pool_size]
+        changed = 0
+        for t in self.tentacles:
+            if not t.active:
+                continue
+            if t.indices[0] in candidate_pool:
+                continue
+            t.indices = np.array([random.choice(candidate_pool)], dtype=np.int64)
+            t.weights = np.array([1.0], dtype=np.float32)
+            changed += 1
+        if changed:
+            print(f"🔄 扩散度热切换: {changed}个触角重新分配画师 (扩散度{spread:.2f})")
+
     def _novelty_bonus(self, vector: np.ndarray) -> float:
         if not self.recent_evaluated_vectors:
             return 1.0
@@ -609,6 +709,7 @@ class SlimeMoldExplorerAnima:
 
     def select_tentacles_to_evaluate(self) -> List[int]:
         self._assign_weak_tentacles()
+        tag_dir = compute_tag_direction()
         candidates = []
         for i, t in enumerate(self.tentacles):
             if not t.active:
@@ -628,6 +729,9 @@ class SlimeMoldExplorerAnima:
                 weight *= pen
             if t.is_weak:
                 weight *= 1.5
+            if tag_dir is not None:
+                sim = np.dot(t.vector, tag_dir)
+                weight *= 1.0 + sim * TAG_GUIDANCE
             candidates.append((i, weight))
         if not candidates:
             return []

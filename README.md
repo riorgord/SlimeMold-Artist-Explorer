@@ -44,7 +44,7 @@
 | 架构 | 编码器 | 向量维度 | 画师串格式 |
 |------|--------|---------|-----------|
 | **SDXL (Illustrious)** | CLIP Text Encode | 2048 | `(by artist:0.90)` |
-| **Anima (DiT)** | Qwen-3 + CLIP | 1024 | `(@artist:0.90)` |
+| **Anima (DiT)** | Qwen-3 | 1024 | `(@artist:0.90)` |
 
 > Anima **turbo** 模式需要额外安装加速 LoRA：[anima-turbo-lora-v0.1.safetensors](https://civitai.com/models/2560840/anima-turbo-lora)  
 > 放入 ComfyUI `models/loras/` 目录。缺少 LoRA 时系统会自动切换为 base 模式（速度约慢 4 倍）。
@@ -54,22 +54,27 @@
 ## 项目结构
 
 ```
-engines/          # 核心算法引擎
-  interactive_style_explorer8.py     # SDXL (Illustrious) 版
-  interactive_style_explorer_anima.py # Anima (DiT) 版
+engines/
+  comfy_clip/                         # ComfyUI 原生 CLIP/Qwen3 模型（本地编码，无需 ComfyUI 运行时）
+  interactive_style_explorer8.py     # SDXL (Illustrious) 版引擎
+  interactive_style_explorer_anima.py # Anima (DiT) 版引擎
+  clip_encoder_sdxl.py               # SDXL 本地 CLIP 编码器
+  clip_encoder_anima.py              # Anima 本地 Qwen3 编码器
 
 webui/            # Web 界面入口
   webui.py              # SDXL 风格探索 (端口 17324)
   anima_webui.py        # Anima 风格探索 (端口 17326)
-  build_webui.py        # SDXL 向量库构建 (端口 17325)
+  build_webui.py        # SDXL 向量库构建 (端口 7862)
   build_webui_anima.py  # Anima 向量库构建 (端口 17327)
 
-scripts/          # 独立工具（命令行）
-  tag_to_tensor.py / *_anima.py      # 批量编码画师标签
-  build_index_2048.py / build_artist_index_anima.py  # 构建 FAISS 索引
-  visualize_artists_2048.py / visualize_anima.py     # PCA 可视化
+scripts/          # 命令行工具
+  build_sdxl_local.py      # SDXL 一步本地建库（读 MD → 编码 → FAISS）
+  build_anima_local.py     # Anima 一步本地建库
+  visualize_artists_2048.py / visualize_anima.py  # PCA 可视化
 
-workflows/        # ComfyUI 工作流模板
+_debug/           # 调试/验证脚本 (.gitignore)
+
+workflows/        # ComfyUI 工作流模板（仅用于生图，不用于编码）
 artists/          # 画师标签数据
 data/             # 运行时数据 (.gitignore)
 outputs_2048/     # SDXL 向量库 (.gitignore)
@@ -82,15 +87,16 @@ outputs_anima/    # Anima 向量库 (.gitignore)
 
 ### 环境要求
 
-- ComfyUI（需安装并启动，API 模式）
 - Python 3.10+
+- ComfyUI（仅用于生图，需安装并启动 API 模式。）
+- PyTorch（`pip install torch`）
 - 预构建的向量库（见下方"构建向量库"）
 
 ### 一键安装 + 启动
 
 **Windows**：双击 `setup_cn.bat`（中国大陆）或 `setup.bat`（其他地区）
 
-**Linux / Mac**：`bash setup_cn.sh`（中国大陆）或 `bash setup.sh`
+**Linux / Mac**：`bash setup_cn.sh`（中国大陆）或 `bash setup.sh`（其他地区）
 
 脚本会自动创建虚拟环境、检测 GPU、安装依赖，安装完成后弹出启动菜单：
 
@@ -111,9 +117,19 @@ python webui/anima_webui.py     # Anima 风格探索
 
 如果 `outputs_2048/` 或 `outputs_anima/` 为空，启动探索器时会提示构建。
 
-1. 准备好画师标签数据（`artists/` 下的 Markdown 文件）
-2. 确保 ComfyUI 安装了 **SaveCondition** 节点（ComfyUI Manager 搜索 `Comfyui-Condition-Utils`）
-3. 运行构建助手并依次执行三个步骤
+**WebUI 方式：** 启动构建助手 → 填好 Markdown 路径、模型路径和前缀 → 点"开始构建"→ 一步完成。
+
+**命令行方式：**
+
+```bash
+# SDXL
+python scripts/build_sdxl_local.py --md ./artists/artists40k.md --ckpt "path/to/checkpoint.safetensors"
+
+# Anima
+python scripts/build_anima_local.py --md ./artists/artists40k.md --encoder "path/to/qwen_3_06b_base.safetensors"
+```
+
+> 不依赖 ComfyUI。编码完全在本地完成，不需要 ComfyUI 安装任何额外节点。每个库背后都自动生成 `library.json` 声明文件，支持多库共存（如 `outputs_anima_1girl/`、`outputs_anima_1boy/`）。
 
 ### 使用流程
 
@@ -141,7 +157,9 @@ python webui/anima_webui.py     # Anima 风格探索
 
 ## 开源协议
 
-AGPL-3.0
+本项目整体以 **AGPL-3.0** 发布。
+
+`engines/comfy_clip/` 目录下的模型代码改编自 [ComfyUI](https://github.com/comfyanonymous/ComfyUI)（GPL-3.0），详见该目录下的 `NOTICE` 文件。分词器数据来自 OpenAI/HuggingFace（MIT）和 ComfyUI（Apache 2.0）。
 
 ---
 

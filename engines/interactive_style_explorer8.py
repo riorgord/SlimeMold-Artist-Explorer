@@ -92,12 +92,25 @@ SCOUT_POINTS_FILE = Path("./data/scout_points.json")  # 探测点数据文件
 ENCODE_CLIP_PATH = ""  # checkpoint 完整路径
 TAG_POS = ""           # 正面 Tag 文本
 TAG_NEG = ""           # 排除 Tag 文本
-TAG_SPREAD = 0.3       # 扩散度 (0=集中, 1=扩散)
+TAG_GUIDANCE = 0.6     # 引导强度 (0=无引导, 1=最强)
+TAG_POOL_SPREAD = 0.5   # 扩散度 (0=集中, 1=扩散)
 
 _CACHED_TAG_DIR = None
 _LAST_TAG_POS = ""
 _LAST_TAG_NEG = ""
 _LAST_CLIP_PATH = ""
+_LIB_PREFIX = None
+
+def get_lib_prefix():
+    """从库目录的 library.json 读取建库前缀。缓存，只读一次。"""
+    global _LIB_PREFIX
+    if _LIB_PREFIX is None:
+        lib_json = VECTOR_DIR / "library.json"
+        if lib_json.exists():
+            _LIB_PREFIX = json.loads(lib_json.read_text(encoding='utf-8')).get("prefix", "")
+        else:
+            _LIB_PREFIX = ""
+    return _LIB_PREFIX
 
 def compute_tag_direction(force=False):
     """返回 Tag 方向向量 (2048-dim, L2归一化) 或 None。
@@ -115,14 +128,15 @@ def compute_tag_direction(force=False):
             return _CACHED_TAG_DIR
     try:
         from engines.clip_encoder_sdxl import encode_text_local
+        prefix = get_lib_prefix()
         if pos and neg:
-            pv = encode_text_local(pos, ENCODE_CLIP_PATH)
-            nv = encode_text_local(neg, ENCODE_CLIP_PATH)
+            pv = encode_text_local(f"{prefix}{pos}", ENCODE_CLIP_PATH)
+            nv = encode_text_local(f"{prefix}{neg}", ENCODE_CLIP_PATH)
             combined = pv - nv
         elif pos:
-            combined = encode_text_local(pos, ENCODE_CLIP_PATH)
+            combined = encode_text_local(f"{prefix}{pos}", ENCODE_CLIP_PATH)
         else:
-            combined = -encode_text_local(neg, ENCODE_CLIP_PATH)
+            combined = -encode_text_local(f"{prefix}{neg}", ENCODE_CLIP_PATH)
         norm = np.linalg.norm(combined)
         if norm > 0:
             combined /= norm
@@ -658,6 +672,25 @@ class SlimeMoldExplorerV6:
         n_unique = len(set(t.indices[0] for t in self.tentacles))
         print(f"🌱 Tag初始化: {self.n_tentacles}个触角 → {n_unique}个不同画师 (扩散度{spread:.2f})")
 
+    def redistribute_from_vector(self, seed_vector: np.ndarray, spread: float):
+        """热切换扩散度：重新分配不在新候选池内的触角，保留评分历史。"""
+        seed_vector = np.asarray(seed_vector, dtype=np.float32).flatten()
+        k_search = min(N_TOTAL_ARTISTS, max(self.n_tentacles * 5, 120))
+        _, idxs = index.search(seed_vector.reshape(1, -1), k_search)
+        pool_size = max(self.n_tentacles, int(k_search * (0.03 + spread * 0.97)))
+        candidate_pool = idxs[0][:pool_size]
+        changed = 0
+        for t in self.tentacles:
+            if not t.active:
+                continue
+            if t.indices[0] in candidate_pool:
+                continue
+            t.indices = np.array([random.choice(candidate_pool)], dtype=np.int64)
+            t.weights = np.array([1.0], dtype=np.float32)
+            changed += 1
+        if changed:
+            print(f"🔄 扩散度热切换: {changed}个触角重新分配画师 (扩散度{spread:.2f})")
+
     def _novelty_bonus(self, vector: np.ndarray) -> float:
         if not self.recent_evaluated_vectors:
             return 1.0
@@ -719,7 +752,7 @@ class SlimeMoldExplorerV6:
             # Tag引导偏置：靠近Tag方向的触角更容易被选中
             if tag_dir is not None:
                 sim = np.dot(t.vector, tag_dir)
-                weight *= 1.0 + sim * (1.0 - TAG_SPREAD) * 0.5
+                weight *= 1.0 + sim * TAG_GUIDANCE
             candidates.append((i, weight))
         if not candidates:
             if DEBUG_MODE:

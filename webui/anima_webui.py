@@ -238,7 +238,49 @@ def run_explore_round_gen(exp, server):
     fig = _make_plot(exp, v8.load_protect_zones()) if batch_items else None
     stats = get_stats_text(exp, v8.load_protect_zones())
     exp.last_batch = batch_items
+    save_explorer_state(exp)
     yield f"✅ 第 {exp.generation} 代完成！{len(batch_items)}/{total} 张成功", batch_items, stats, fig
+
+# -- Anima 探索状态持久化 --
+EXPLORER_SAVE_ANIMA = _PROJ / "data/explorer_save_anima.json"
+def save_explorer_state(exp):
+    if exp is None: return
+    data = {"version":1,"n_tentacles":exp.n_tentacles,"eval_budget":exp.eval_budget,"generation":exp.generation,
+            "global_best":None,"tentacles":[],"scout_points":exp.scout_points,
+            "last_batch":getattr(exp,"last_batch",[])}
+    if exp.global_best is not None:
+        data["global_best"] = {"indices":exp.global_best[0].tolist(),"weights":exp.global_best[1].tolist(),"score":exp.global_best[2]}
+    for t in exp.tentacles:
+        data["tentacles"].append({"indices":t.indices.tolist(),"weights":t.weights.tolist(),"birth_gen":t.birth_gen,
+            "last_eval_gen":t.last_eval_gen,"score_history":[[g,s] for g,s in t.score_history],
+            "vector":t.vector.tolist(),"step_size":t.step_size,"active":t.active,"is_weak":t.is_weak,"scout_id":t.scout_id})
+    with open(EXPLORER_SAVE_ANIMA,'w',encoding='utf-8') as f: json.dump(data,f,indent=2,ensure_ascii=False)
+def load_explorer_state():
+    if not EXPLORER_SAVE_ANIMA.exists(): return None
+    try:
+        with open(EXPLORER_SAVE_ANIMA,'r',encoding='utf-8') as f: data = json.load(f)
+        exp = v8.SlimeMoldExplorerAnima.__new__(v8.SlimeMoldExplorerAnima)
+        exp.n_tentacles=data["n_tentacles"];exp.eval_budget=data["eval_budget"];exp.generation=data["generation"]
+        exp.recent_evaluated_vectors=[]; exp.scout_points=data.get("scout_points",[])
+        exp.last_batch=data.get("last_batch",[])
+        if data.get("global_best"):
+            exp.global_best=(np.array(data["global_best"]["indices"],dtype=np.int64),
+                            np.array(data["global_best"]["weights"],dtype=np.float32),data["global_best"]["score"])
+        else: exp.global_best=None
+        exp.tentacles=[]
+        for td in data["tentacles"]:
+            t=v8.Tentacle.__new__(v8.Tentacle)
+            t.indices=np.array(td["indices"],dtype=np.int64);t.weights=np.array(td["weights"],dtype=np.float32)
+            t.birth_gen=td.get("birth_gen",0);t.last_eval_gen=td.get("last_eval_gen",0)
+            t.score_history=[(g,s) for g,s in td.get("score_history",[])]
+            t.vector=np.array(td["vector"],dtype=np.float32);t.step_size=td.get("step_size",0.085)
+            t.active=td.get("active",True);t.is_weak=td.get("is_weak",False)
+            t.scout_id=td.get("scout_id");t.trace=deque(maxlen=v8.TRACE_HISTORY_LEN);exp.tentacles.append(t)
+        return exp
+    except Exception:
+        try:EXPLORER_SAVE_ANIMA.unlink()
+        except:pass
+        return None
 
 def _rh_score(value, idx):
     val = max(-10.0, min(10.0, float(value))) if value is not None else 0.0; buffer_save_score(int(idx), val)
@@ -263,8 +305,9 @@ def _rh_save_image(url: str, idx: int):
     if not url or idx < 0: gr.Warning("无可保存图片"); return
     try:
         resp = requests.get(url); resp.raise_for_status()
-        _PROJ / "data/output".mkdir(exist_ok=True)
-        fname = f"data/output/tentacle_anima_{idx}.png"
+        out_dir = _PROJ / "data/output"
+        out_dir.mkdir(exist_ok=True)
+        fname = out_dir / f"tentacle_anima_{idx}.png"
         with open(fname, 'wb') as f: f.write(resp.content); gr.Info(f"已保存: {fname}")
     except Exception as e: gr.Error(f"保存失败: {e}")
 
@@ -287,6 +330,27 @@ def build_app():
             with gr.Row():
                 psize_input = gr.Number(value=4, label="每页显示", precision=0, minimum=1, maximum=16, scale=1)
             psize_input.change(fn=lambda v: (int(v), 0), inputs=[psize_input], outputs=[page_size_state, page_state])
+
+            # ---- Tag辅助（热切换：每次点探索自动同步）----
+            with gr.Row():
+                tag_ckpt = gr.Textbox(label="📦 编码器路径 (.safetensors)",
+                                      placeholder="填写 qwen_3_06b_base.safetensors 完整路径，留空则关闭Tag辅助",
+                                      value=get_setting('tag_ckpt_anima', ''), scale=3)
+            with gr.Row():
+                tag_pos = gr.Textbox(label="🎯 正面提示词",
+                                     placeholder="支持自然语言，如: sketch, monochrome, lineart",
+                                     value=get_setting('tag_pos_anima', ''), scale=3)
+                tag_neg = gr.Textbox(label="🚫 排除提示词",
+                                     placeholder="如: 3d, realistic, cgi",
+                                     value=get_setting('tag_neg_anima', ''),
+                                     scale=3)
+            with gr.Row():
+                tag_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_spread_anima', 0.6), step=0.05,
+                                       label="引导强度 (1=最强)", scale=2)
+                tag_pool_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_pool_spread_anima', 0.5), step=0.05,
+                                            label="扩散度 (0=集中)", scale=2)
+            gr.Markdown("*编码器路径必填 + 正面/排除至少填一个，否则走随机模式。中途修改热切换，无需重新初始化。*")
+
             grid_css = gr.HTML("<style>" + " ".join([f".ga-{i}{{display:none!important}}" for i in range(16)]) + "</style>")
             with gr.Row():
                 prev_btn = gr.Button("◀", size="sm", scale=1); page_info = gr.Markdown("**0/0** 共0条"); next_btn = gr.Button("▶", size="sm", scale=1)
@@ -493,28 +557,83 @@ def build_app():
         # ============================================================
         # 事件绑定
         # ============================================================
-        def on_init(spread):
-            buffer_clear(); buffer_flush_to_file()
-            exp = create_explorer(spread); save_explorer_state(exp); gr.Info("🆕 新会话已初始化")
-            return (exp, f"### {get_stats_text(exp, v8.load_protect_zones())}", [], 0, get_ban_md(), get_pz_md(), get_scout_md(exp))
-        init_btn.click(fn=on_init, inputs=[spread_slider], outputs=[explorer_state, stats_display, batch_state, page_state, ban_md, pz_md, scout_md])
+        # -- Tag同步 --
+        def _sync_tag(ckpt, pos, neg, guidance, pool_spread):
+            c = ckpt.strip() if ckpt else ""
+            p = pos.strip() if pos else ""
+            n = neg.strip() if neg else ""
+            changed = (c != v8.ENCODE_CLIP_PATH or p != v8.TAG_POS or n != v8.TAG_NEG)
+            pool_changed = (pool_spread != v8.TAG_POOL_SPREAD)
+            v8.ENCODE_CLIP_PATH = c
+            v8.TAG_POS = p
+            v8.TAG_NEG = n
+            v8.TAG_GUIDANCE = guidance
+            v8.TAG_POOL_SPREAD = pool_spread
+            save_settings({**load_settings(), 'tag_ckpt_anima': c, 'tag_pos_anima': p, 'tag_neg_anima': n,
+                           'tag_spread_anima': guidance, 'tag_pool_spread_anima': pool_spread})
+            if not c or (not p and not n):
+                return False, None, False
+            try:
+                return True, v8.compute_tag_direction(force=changed), pool_changed and not changed
+            except Exception as e:
+                print(f"[WARN] Tag编码失败: {e}")
+                return False, None
 
-        def on_main_action(exp):
+        # -- 初始化 --
+        def on_init(spread, ckpt, pos, neg, guidance, pool_spread):
+            buffer_clear(); buffer_flush_to_file()
+            save_settings({**load_settings(), 'spread_anima': spread, 'tag_spread_anima': guidance,
+                           'tag_pool_spread_anima': pool_spread})
+            c = ckpt.strip() if ckpt else ""
+            p = pos.strip() if pos else ""
+            n = neg.strip() if neg else ""
+            if c and (p or n):
+                tag_on, tag_dir, _ = _sync_tag(ckpt, pos, neg, guidance, pool_spread)
+                if tag_on and tag_dir is not None:
+                    exp = v8.SlimeMoldExplorerAnima(n_tentacles=v8.N_TENTACLES, eval_budget=v8.EVAL_BUDGET, spread=0)
+                    exp.init_from_vector(tag_dir, pool_spread)
+                    save_explorer_state(exp)
+                    stats = (f"🟢 活跃 {v8.N_TENTACLES}/{v8.N_TENTACLES}　🎯 Tag方向出发　"
+                             f"🧬 第 0 代　|　扩散度 {guidance:.2f}")
+                    gr.Info("🆕 Tag辅助初始化完成")
+                    return (exp, f"### {stats}", [], 0, get_ban_md(), get_pz_md(), get_scout_md(exp))
+            elif not ckpt and not pos and not neg:
+                pass  # 老方法
+            else:
+                if not ckpt: gr.Warning("未填写编码器路径，走随机初始化")
+                else: gr.Warning("正面/排除至少填一个")
+            exp = create_explorer(spread); save_explorer_state(exp)
+            return (exp, f"### {get_stats_text(exp, v8.load_protect_zones())}", [], 0, get_ban_md(), get_pz_md(), get_scout_md(exp))
+        init_btn.click(fn=on_init, inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
+                       outputs=[explorer_state, stats_display, batch_state, page_state, ban_md, pz_md, scout_md])
+
+        def on_main_action(exp, ckpt, pos, neg, guidance, pool_spread):
             import traceback
             try:
                 if exp is None: gr.Warning("请先初始化探索器"); yield [], "### ❌ 请先初始化", None, exp, 0, ""; return
-                gr.Info("开始探索...")
                 server = get_setting('anima_comfy', v8.COMFYUI_SERVER)
+                # Tag 热切换
+                c = ckpt.strip() if ckpt else ""
+                p = pos.strip() if pos else ""
+                n = neg.strip() if neg else ""
+                if c and (p or n):
+                    yield [], "### 🧬 编码Tag方向...", None, exp, 0, "🧬 编码Tag方向..."
+                tag_on, tag_dir, pool_changed = _sync_tag(ckpt, pos, neg, guidance, pool_spread)
+                if tag_on and tag_dir is not None and pool_changed:
+                    exp.redistribute_from_vector(tag_dir, pool_spread)
+                if tag_on: gr.Info("🎯 Tag引导模式")
+                else: gr.Info("🎲 随机探索模式")
+                # 提交评分
                 sd = buffer_get_scores()
                 if sd: yield [], "### 探索中...", None, exp, 0, "⏳ 提交评分中..."; submit_scores(exp, sd); buffer_clear(); buffer_flush_to_file()
                 for pt, bi, st, fig in run_explore_round_gen(exp, server):
                     sm = f"### {st}" if st else ""; pv = fig if fig is not None else gr.update()
                     yield bi, sm, pv, exp, 0, pt
-                if bi: save_explorer_state(exp)
             except Exception as e:
                 tb = traceback.format_exc(); print(f"[Anima] {e}\n{tb}"); gr.Error(str(e))
                 yield [], f"### ❌ {e}", None, exp, 0, f"❌ {e}"
-        main_btn.click(fn=on_main_action, inputs=[explorer_state], outputs=[batch_state, stats_display, pca_plot, explorer_state, page_state, progress_status])
+        main_btn.click(fn=on_main_action, inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
+                       outputs=[batch_state, stats_display, pca_plot, explorer_state, page_state, progress_status])
 
         # -- 快捷指令 --
         def cmd_ban(exp, idx):
@@ -765,46 +884,6 @@ def build_app():
             inputs=[s_mode,s_srv,s_wf,s_w,s_h,s_st,s_cf,s_samp,s_sch,s_unet,s_pos,s_neg,s_nt,s_ev,s_mg,s_sth,s_mc,s_ss, s_tmp,
                     s_bs,s_bm,s_br,s_bp,s_bd,s_pp,s_pm,s_pc,s_wn,s_pr,s_pl,s_mw,s_debug,s_plot,s_trace],
             outputs=[save_log])
-
-        # -- 保存/载入 Anima 探索状态 --
-        EXPLORER_SAVE_ANIMA = _PROJ / "data/explorer_save_anima.json"
-        def save_explorer_state(exp):
-            if exp is None: return
-            data = {"version":1,"n_tentacles":exp.n_tentacles,"eval_budget":exp.eval_budget,"generation":exp.generation,
-                    "global_best":None,"tentacles":[],"scout_points":exp.scout_points}
-            if exp.global_best is not None:
-                data["global_best"] = {"indices":exp.global_best[0].tolist(),"weights":exp.global_best[1].tolist(),"score":exp.global_best[2]}
-            for t in exp.tentacles:
-                data["tentacles"].append({"indices":t.indices.tolist(),"weights":t.weights.tolist(),"birth_gen":t.birth_gen,
-                    "last_eval_gen":t.last_eval_gen,"score_history":[[g,s] for g,s in t.score_history],
-                    "vector":t.vector.tolist(),"step_size":t.step_size,"active":t.active,"is_weak":t.is_weak,"scout_id":t.scout_id})
-            with open(EXPLORER_SAVE_ANIMA,'w',encoding='utf-8') as f: json.dump(data,f,indent=2,ensure_ascii=False)
-        def load_explorer_state():
-            if not EXPLORER_SAVE_ANIMA.exists(): return None
-            try:
-                with open(EXPLORER_SAVE_ANIMA,'r',encoding='utf-8') as f: data = json.load(f)
-                exp = v8.SlimeMoldExplorerAnima.__new__(v8.SlimeMoldExplorerAnima)
-                exp.n_tentacles=data["n_tentacles"];exp.eval_budget=data["eval_budget"];exp.generation=data["generation"]
-                exp.recent_evaluated_vectors=[]
-                if data.get("global_best"):
-                    exp.global_best=(np.array(data["global_best"]["indices"],dtype=np.int64),
-                                    np.array(data["global_best"]["weights"],dtype=np.float32),data["global_best"]["score"])
-                else: exp.global_best=None
-                exp.tentacles=[]
-                for td in data["tentacles"]:
-                    t=v8.Tentacle.__new__(v8.Tentacle)
-                    t.indices=np.array(td["indices"],dtype=np.int64);t.weights=np.array(td["weights"],dtype=np.float32)
-                    t.birth_gen=td.get("birth_gen",0);t.last_eval_gen=td.get("last_eval_gen",0)
-                    t.score_history=[(g,s) for g,s in td.get("score_history",[])]
-                    t.vector=np.array(td["vector"],dtype=np.float32);t.step_size=td.get("step_size",0.085)
-                    t.active=td.get("active",True);t.is_weak=td.get("is_weak",False)
-                    t.scout_id=td.get("scout_id");t.trace=deque(maxlen=v8.TRACE_HISTORY_LEN);exp.tentacles.append(t)
-                exp.scout_points=data.get("scout_points",[])
-                return exp
-            except Exception:
-                try:EXPLORER_SAVE_ANIMA.unlink()
-                except:pass
-                return None
 
         # -- 启动构建助手 --
         def on_launch_build():
