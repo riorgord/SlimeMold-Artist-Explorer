@@ -119,6 +119,7 @@ TAG_NEG = ""
 TAG_GUIDANCE = 0.6  # 引导强度 (0=无引导, 1=最强)
 TAG_POOL_SPREAD = 0.5
 _LIB_PREFIX = None
+FIXED_SEED = -1  # -1=随机(ComfyUI管理), 其他=固定种子
 
 def get_lib_prefix():
     """从库目录的 library.json 读取建库前缀。缓存，只读一次。"""
@@ -327,7 +328,7 @@ def build_workflow(positive_prompt: str, negative_prompt: str, seed: int, filena
             node['inputs']['cfg'] = CFG
             node['inputs']['sampler_name'] = SAMPLER_NAME
             node['inputs']['scheduler'] = SCHEDULER
-        
+
         # 空Latent图像（节点32）
         elif class_type == 'EmptyLatentImage':
             node['inputs']['width'] = WIDTH
@@ -338,6 +339,8 @@ def build_workflow(positive_prompt: str, negative_prompt: str, seed: int, filena
         elif class_type == 'SaveImage':
             node['inputs']['filename_prefix'] = str(RUN_OUTPUT_DIR / filename_prefix)
     
+    if DEBUG_MODE:
+        print(f"[DEBUG] build_workflow: seed={seed}, steps={STEPS}, cfg={CFG}, prefix={filename_prefix}")
     return wf
 
 def queue_prompt(workflow: Dict) -> str:
@@ -357,7 +360,9 @@ def wait_for_prompt(prompt_id: str, timeout: int = 120) -> Optional[Dict]:
 
 def generate_single_image(vector: np.ndarray, gen: int, tag: str) -> Optional[str]:
     prompt = f"{BASE_POSITIVE_PROMPT}, {vector_to_artist_string(vector)}"
-    seed = gen * 1000 + hash(tag) % 1000
+    seed = FIXED_SEED if FIXED_SEED != -1 else (gen * 1000 + hash(tag) % 1000)
+    if DEBUG_MODE:
+        print(f"[DEBUG] generate_single_image: gen={gen}, tag={tag}, seed={seed}")
     fname = f"gen{gen}_{tag}"
     wf = build_workflow(prompt, BASE_NEGATIVE_PROMPT, seed, fname)
     pid = queue_prompt(wf)
@@ -747,7 +752,9 @@ class SlimeMoldExplorerAnima:
             t = self.tentacles[idx]
             prompt = f"{BASE_POSITIVE_PROMPT}, {vector_to_artist_string(t.vector)}"
             fname = f"gen{self.generation:02d}_t{idx:03d}"
-            seed = self.generation * 100 + idx
+            seed = FIXED_SEED if FIXED_SEED != -1 else (self.generation * 100 + idx)
+            if DEBUG_MODE:
+                print(f"[DEBUG]   tentacle #{idx}: seed={seed}, file={fname}")
             wf = build_workflow(prompt, BASE_NEGATIVE_PROMPT, seed, fname)
             pid = queue_prompt(wf)
             res = wait_for_prompt(pid)
@@ -1088,7 +1095,7 @@ class ProtectZone:
         artist_str = vector_to_artist_string(blended, top_k=self.mixed_count)
         prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"protect_{self.zone_id}_gen{self.generation}"
-        seed = self.generation * 1000 + self.zone_id
+        seed = FIXED_SEED if FIXED_SEED != -1 else (self.generation * 1000 + self.zone_id)
         wf = build_workflow(prompt, BASE_NEGATIVE_PROMPT, seed, fname)
         pid = queue_prompt(wf)
         res = wait_for_prompt(pid)

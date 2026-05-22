@@ -410,6 +410,7 @@ def get_tentacle_marker(t) -> str:
 
 def run_explore_round(explorer: SlimeMoldExplorerV6, server: str):
     """执行一轮全局探索，返回（批次数据, 统计文字, PCA图）"""
+    import engines.interactive_style_explorer8 as _v8s
     if explorer is None:
         return [], "请先初始化探索器", None
 
@@ -436,7 +437,7 @@ def run_explore_round(explorer: SlimeMoldExplorerV6, server: str):
         artist_str = vector_to_artist_string(t.vector)
         prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"gen{explorer.generation:02d}_t{idx:03d}"
-        seed = explorer.generation * 100 + idx
+        seed = _v8s.FIXED_SEED if _v8s.FIXED_SEED != -1 else (explorer.generation * 100 + idx)
         wf = build_workflow(prompt, BASE_NEGATIVE_PROMPT, seed, fname)
         pid = queue_prompt(wf)
         t0 = time.time()
@@ -480,6 +481,7 @@ def run_explore_round(explorer: SlimeMoldExplorerV6, server: str):
 
 
 def run_explore_round_gen(explorer: SlimeMoldExplorerV6, server: str):
+    import engines.interactive_style_explorer8 as _v8s
     """Generator 版探索，每次 yield (进度文字, 批次数据, 统计文字, PCA图)"""
     if explorer is None:
         yield "探索器未初始化", [], "请先初始化探索器", None
@@ -512,7 +514,7 @@ def run_explore_round_gen(explorer: SlimeMoldExplorerV6, server: str):
         artist_str = vector_to_artist_string(t.vector)
         prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"gen{explorer.generation:02d}_t{idx:03d}"
-        seed = explorer.generation * 100 + idx
+        seed = _v8s.FIXED_SEED if _v8s.FIXED_SEED != -1 else (explorer.generation * 100 + idx)
         wf = build_workflow(prompt, BASE_NEGATIVE_PROMPT, seed, fname)
         pid = queue_prompt(wf)
 
@@ -1116,6 +1118,9 @@ def build_app():
                                        label="引导强度 (1=最强)", scale=2)
                 tag_pool_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_pool_spread', 0.5), step=0.05,
                                             label="扩散度 (0=集中)", scale=2)
+            with gr.Row():
+                seed_input = gr.Number(value=get_setting('seed', -1), label="🌱 生图种子", precision=0,
+                                      info="-1=随机(ComfyUI管理), 其他=固定种子", scale=2)
             gr.Markdown("*Checkpoint 必填 + 正面/排除至少填一个，否则走随机模式。中途修改 Tag 热切换，无需重新初始化。*")
 
             # ---- 单元格可见性 CSS（预创建网格用）----
@@ -1567,10 +1572,12 @@ def build_app():
                 return False, None, False
 
         # -- 初始化 --
-        def on_init(spread, ckpt, pos, neg, guidance, pool_spread):
+        def on_init(spread, ckpt, pos, neg, guidance, pool_spread, seed):
+            import engines.interactive_style_explorer8 as v8s
             buffer_clear()
             buffer_flush_to_file()
-            save_settings({**load_settings(), 'spread': spread, 'tag_spread': guidance, 'tag_pool_spread': pool_spread})
+            save_settings({**load_settings(), 'spread': spread, 'tag_spread': guidance, 'tag_pool_spread': pool_spread, 'seed': seed})
+            v8s.FIXED_SEED = int(seed)
             if DEBUG_MODE:
                 print(f"[DEBUG] on_init: spread={spread:.2f}, ckpt={'...' if ckpt else '空'}, pos={'...' if pos else '空'}, neg={'...' if neg else '空'}")
             tag_on, tag_dir, _ = _sync_tag(ckpt, pos, neg, guidance, pool_spread)
@@ -1605,13 +1612,16 @@ def build_app():
 
         init_btn.click(
             fn=on_init,
-            inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
+            inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread, seed_input],
             outputs=[explorer_state, stats_display, batch_state, page_state, ban_markdown, pz_markdown, scout_markdown]
         )
 
         # -- 主操作：提交评分(如有) + 探索下一轮 --
-        def on_main_action(exp, ckpt, pos, neg, guidance, pool_spread):
+        def on_main_action(exp, ckpt, pos, neg, guidance, pool_spread, seed):
+            import engines.interactive_style_explorer8 as v8s
             import traceback
+            v8s.FIXED_SEED = int(seed)
+            print(f"[DEBUG] on_main_action: FIXED_SEED set to {v8s.FIXED_SEED} (input was {seed})")
             try:
                 if exp is None:
                     gr.Warning("请先初始化探索器")
@@ -1660,7 +1670,7 @@ def build_app():
 
         main_btn.click(
             fn=on_main_action,
-            inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
+            inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread, seed_input],
             outputs=[batch_state, stats_display, pca_plot, explorer_state, page_state, progress_status]
         )
 

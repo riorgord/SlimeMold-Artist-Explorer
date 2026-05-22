@@ -100,6 +100,7 @@ _LAST_TAG_POS = ""
 _LAST_TAG_NEG = ""
 _LAST_CLIP_PATH = ""
 _LIB_PREFIX = None
+FIXED_SEED = -1  # -1=随机(ComfyUI管理), 其他值=固定种子
 
 def get_lib_prefix():
     """从库目录的 library.json 读取建库前缀。缓存，只读一次。"""
@@ -320,7 +321,7 @@ def wait_for_prompt(prompt_id: str, timeout: int = 120,
 
 def generate_single_image(vector: np.ndarray, gen: int, tag: str) -> Optional[str]:
     prompt = f"{BASE_POSITIVE_PROMPT}, {vector_to_artist_string(vector)}"
-    seed = gen * 1000 + hash(tag) % 1000
+    seed = FIXED_SEED if FIXED_SEED != -1 else (gen * 1000 + hash(tag) % 1000)
     fname = f"gen{gen}_{tag}"
     if DEBUG_MODE:
         print(f"[DEBUG] generate_single_image: gen={gen}, tag={tag}, seed={seed}, fname={fname}")
@@ -776,8 +777,9 @@ class SlimeMoldExplorerV6:
             artist_str = vector_to_artist_string(t.vector)
             prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
             fname = f"gen{self.generation:02d}_t{idx:03d}"
-            seed = self.generation * 100 + idx
+            seed = FIXED_SEED if FIXED_SEED != -1 else (self.generation * 100 + idx)
             if DEBUG_MODE:
+                print(f"[DEBUG]   tentacle #{idx}: FIXED_SEED={FIXED_SEED}, computed seed={seed}")
                 marker_parts = []
                 if t.is_weak:
                     marker_parts.append("弱")
@@ -1173,7 +1175,7 @@ class ProtectZone:
         artist_str = vector_to_artist_string(blended, top_k=self.mixed_count)
         prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"protect_{self.zone_id}_gen{self.generation}"
-        seed = self.generation * 1000 + self.zone_id
+        seed = FIXED_SEED if FIXED_SEED != -1 else (self.generation * 1000 + self.zone_id)
         wf = build_workflow(prompt, BASE_NEGATIVE_PROMPT, seed, fname)
         pid = queue_prompt(wf)
         res = wait_for_prompt(pid)

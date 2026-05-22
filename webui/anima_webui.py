@@ -55,7 +55,7 @@ import engines.interactive_style_explorer_anima as v8
 
 os.makedirs(_PROJ / "data", exist_ok=True)
 
-SETTINGS_FILE = _PROJ / "data/webui_settings.json"
+SETTINGS_FILE = _PROJ / "data/webui_settings_anima.json"
 def load_settings() -> dict:
     if SETTINGS_FILE.exists():
         try:
@@ -199,7 +199,7 @@ def run_explore_round_gen(exp, server):
     for i, idx in enumerate(selected):
         t = exp.tentacles[idx]; artist_str = v8.vector_to_artist_string(t.vector)
         prompt = f"{v8.BASE_POSITIVE_PROMPT}, {artist_str}"
-        fname = f"gen{exp.generation:02d}_t{idx:03d}"; seed = exp.generation*100+idx
+        fname = f"gen{exp.generation:02d}_t{idx:03d}"; seed = v8.FIXED_SEED if v8.FIXED_SEED != -1 else (exp.generation*100+idx)
         wf = v8.build_workflow(prompt, v8.BASE_NEGATIVE_PROMPT, seed, fname); pid = v8.queue_prompt(wf)
         poll_start = time.time(); res = None
         while True:
@@ -349,6 +349,9 @@ def build_app():
                                        label="引导强度 (1=最强)", scale=2)
                 tag_pool_spread = gr.Slider(0.0, 1.0, value=get_setting('tag_pool_spread_anima', 0.5), step=0.05,
                                             label="扩散度 (0=集中)", scale=2)
+            with gr.Row():
+                seed_input = gr.Number(value=get_setting('seed_anima', -1), label="🌱 生图种子", precision=0,
+                                      info="-1=随机(ComfyUI管理), 其他=固定种子", scale=2)
             gr.Markdown("*编码器路径必填 + 正面/排除至少填一个，否则走随机模式。中途修改热切换，无需重新初始化。*")
 
             grid_css = gr.HTML("<style>" + " ".join([f".ga-{i}{{display:none!important}}" for i in range(16)]) + "</style>")
@@ -580,10 +583,11 @@ def build_app():
                 return False, None
 
         # -- 初始化 --
-        def on_init(spread, ckpt, pos, neg, guidance, pool_spread):
+        def on_init(spread, ckpt, pos, neg, guidance, pool_spread, seed):
             buffer_clear(); buffer_flush_to_file()
             save_settings({**load_settings(), 'spread_anima': spread, 'tag_spread_anima': guidance,
-                           'tag_pool_spread_anima': pool_spread})
+                           'tag_pool_spread_anima': pool_spread, 'seed_anima': seed})
+            v8.FIXED_SEED = int(seed)
             c = ckpt.strip() if ckpt else ""
             p = pos.strip() if pos else ""
             n = neg.strip() if neg else ""
@@ -604,11 +608,12 @@ def build_app():
                 else: gr.Warning("正面/排除至少填一个")
             exp = create_explorer(spread); save_explorer_state(exp)
             return (exp, f"### {get_stats_text(exp, v8.load_protect_zones())}", [], 0, get_ban_md(), get_pz_md(), get_scout_md(exp))
-        init_btn.click(fn=on_init, inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
+        init_btn.click(fn=on_init, inputs=[spread_slider, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread, seed_input],
                        outputs=[explorer_state, stats_display, batch_state, page_state, ban_md, pz_md, scout_md])
 
-        def on_main_action(exp, ckpt, pos, neg, guidance, pool_spread):
+        def on_main_action(exp, ckpt, pos, neg, guidance, pool_spread, seed):
             import traceback
+            v8.FIXED_SEED = int(seed)
             try:
                 if exp is None: gr.Warning("请先初始化探索器"); yield [], "### ❌ 请先初始化", None, exp, 0, ""; return
                 server = get_setting('anima_comfy', v8.COMFYUI_SERVER)
@@ -632,7 +637,7 @@ def build_app():
             except Exception as e:
                 tb = traceback.format_exc(); print(f"[Anima] {e}\n{tb}"); gr.Error(str(e))
                 yield [], f"### ❌ {e}", None, exp, 0, f"❌ {e}"
-        main_btn.click(fn=on_main_action, inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread],
+        main_btn.click(fn=on_main_action, inputs=[explorer_state, tag_ckpt, tag_pos, tag_neg, tag_spread, tag_pool_spread, seed_input],
                        outputs=[batch_state, stats_display, pca_plot, explorer_state, page_state, progress_status])
 
         # -- 快捷指令 --
