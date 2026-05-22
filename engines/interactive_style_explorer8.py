@@ -204,21 +204,26 @@ def blend_from_indices(indices: np.ndarray, weights: np.ndarray) -> np.ndarray:
         blended = blended / norm
     return blended.astype(np.float32)
 
-def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
+def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None, skip_ids: set = None) -> str:
     if top_k is None:
         top_k = MIXED_ARTISTS_COUNT
     blended_vec = np.asarray(blended_vec, dtype=np.float32).flatten()
-    distances, idxs = index.search(blended_vec.reshape(1, -1), top_k * 3)
+    search_k = max(top_k * 3, top_k + (len(skip_ids) if skip_ids else 0))
+    distances, idxs = index.search(blended_vec.reshape(1, -1), search_k * 2)
     ds = distances[0]
     parts = []
     used_ids = set()
-    for rank, (idx, dist) in enumerate(zip(idxs[0], ds)):
+    if skip_ids:
+        used_ids.update(skip_ids)
+    local_rank = 0
+    for idx, dist in zip(idxs[0], ds):
         artist_id = artist_ids_all[idx]
         if artist_id in used_ids:
             continue
-        weight = max(0.01, 1.0 - (rank / top_k) * TEMPERATURE)
+        weight = max(0.01, 1.0 - (local_rank / top_k) * TEMPERATURE)
         name = id_to_name.get(artist_id, str(artist_id))
         parts.append(f"(by {name}:{weight:.2f})")
+        local_rank += 1
         used_ids.add(artist_id)
         if len(parts) >= top_k:
             break
@@ -772,9 +777,16 @@ class SlimeMoldExplorerV6:
         if DEBUG_MODE:
             print(f"[DEBUG] evaluate_selected: gen={self.generation}, ids={selected_indices}")
         results = []
+        used_artist_ids = set()
         for idx in selected_indices:
             t = self.tentacles[idx]
-            artist_str = vector_to_artist_string(t.vector)
+            artist_str = vector_to_artist_string(t.vector, skip_ids=used_artist_ids)
+            # 记录已用画师，下一根触角跳过
+            for token in artist_str.split(", "):
+                name = token.split(":")[0].replace("(by ", "").strip()
+                aid = name_to_id.get(name)
+                if aid is not None:
+                    used_artist_ids.add(aid)
             prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
             fname = f"gen{self.generation:02d}_t{idx:03d}"
             seed = FIXED_SEED if FIXED_SEED != -1 else (self.generation * 100 + idx)

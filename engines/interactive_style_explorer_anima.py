@@ -241,14 +241,17 @@ def blend_from_indices(indices: np.ndarray, weights: np.ndarray) -> np.ndarray:
         blended = blended / norm
     return blended.astype(np.float32)
 
-def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None) -> str:
+def vector_to_artist_string(blended_vec: np.ndarray, top_k: int = None, skip_ids: set = None) -> str:
     """Anima 格式：@artist_name:weight"""
     if top_k is None:
         top_k = MIXED_ARTISTS_COUNT
     blended_vec = np.asarray(blended_vec, dtype=np.float32).flatten()
-    distances, idxs = index.search(blended_vec.reshape(1, -1), top_k * 3)
+    search_k = max(top_k * 3, top_k + (len(skip_ids) if skip_ids else 0))
+    distances, idxs = index.search(blended_vec.reshape(1, -1), search_k * 2)
     parts = []
     used_ids = set()
+    if skip_ids:
+        used_ids.update(skip_ids)
     ds = distances[0]
     d_min, d_max = ds.min(), ds.max()
     d_range = d_max - d_min

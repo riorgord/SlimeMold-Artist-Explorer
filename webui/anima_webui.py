@@ -194,10 +194,15 @@ def run_explore_round_gen(exp, server):
     if exp is None: yield "探索器未初始化", [], "请先初始化探索器", None; return
     exp.generation += 1; selected = exp.select_tentacles_to_evaluate()
     if not selected: yield "⚠️ 无可用触角", [], "⚠️ 无可用触角", None; return
-    total = len(selected); batch_items = []; taco_times = []
+    total = len(selected); batch_items = []; used_artist_ids = set(); taco_times = []
     yield f"⏳ 第 {exp.generation} 代: 选中 {total} 个触角...", batch_items, "", None
     for i, idx in enumerate(selected):
-        t = exp.tentacles[idx]; artist_str = v8.vector_to_artist_string(t.vector)
+        t = exp.tentacles[idx]; artist_str = v8.vector_to_artist_string(t.vector, skip_ids=used_artist_ids)
+        for token in artist_str.split(", "):
+            name = token.split(":")[0].replace("(@", "").strip()
+            aid = v8.name_to_id.get(name)
+            if aid is not None:
+                used_artist_ids.add(aid)
         prompt = f"{v8.BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"gen{exp.generation:02d}_t{idx:03d}"; seed = v8.FIXED_SEED if v8.FIXED_SEED != -1 else (exp.generation*100+idx)
         wf = v8.build_workflow(prompt, v8.BASE_NEGATIVE_PROMPT, seed, fname); pid = v8.queue_prompt(wf)

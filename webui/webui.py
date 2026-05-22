@@ -431,10 +431,16 @@ def run_explore_round(explorer: SlimeMoldExplorerV6, server: str):
         print(f"[DEBUG] 服务器: {server}")
 
     batch_items = []
+    used_artist_ids = set()
 
     for idx in selected:
         t = explorer.tentacles[idx]
-        artist_str = vector_to_artist_string(t.vector)
+        artist_str = vector_to_artist_string(t.vector, skip_ids=used_artist_ids)
+        for token in artist_str.split(", "):
+            name = token.split(":")[0].replace("(by ", "").strip()
+            aid = name_to_id.get(name)
+            if aid is not None:
+                used_artist_ids.add(aid)
         prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"gen{explorer.generation:02d}_t{idx:03d}"
         seed = _v8s.FIXED_SEED if _v8s.FIXED_SEED != -1 else (explorer.generation * 100 + idx)
@@ -506,12 +512,18 @@ def run_explore_round_gen(explorer: SlimeMoldExplorerV6, server: str):
 
     total = len(selected)
     batch_items = []
+    used_artist_ids = set()
     taco_times = []  # 已完成触角的耗时，用于计算倒计时
     yield f"⏳ 第 {explorer.generation} 代: 选中 {total} 个触角，开始执行...", batch_items, "", None
 
     for i, idx in enumerate(selected):
         t = explorer.tentacles[idx]
-        artist_str = vector_to_artist_string(t.vector)
+        artist_str = vector_to_artist_string(t.vector, skip_ids=used_artist_ids)
+        for token in artist_str.split(", "):
+            name = token.split(":")[0].replace("(by ", "").strip()
+            aid = name_to_id.get(name)
+            if aid is not None:
+                used_artist_ids.add(aid)
         prompt = f"{BASE_POSITIVE_PROMPT}, {artist_str}"
         fname = f"gen{explorer.generation:02d}_t{idx:03d}"
         seed = _v8s.FIXED_SEED if _v8s.FIXED_SEED != -1 else (explorer.generation * 100 + idx)
